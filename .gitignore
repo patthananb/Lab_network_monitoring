@@ -19,4 +19,4 @@ weatherstation_docker/mosquitto_log/
 
 # Temporary files
 *.json
-!updated_dashboard.json # if you wanted to keep it, but we already deleted it
+!weatherstation_docker/dashboard_template.json
