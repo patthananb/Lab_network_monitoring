@@ -27,7 +27,7 @@ _Snapshot as of 2026-04-17._
 | InfluxDB           | `http://raspberrypi4.local:8086`  | ✅ running |
 | Telegraf           | Pi (docker container)             | ✅ running (host telemetry enabled) |
 | Grafana            | `http://raspberrypi4.local:3000`  | ✅ running |
-| Firmware (flashed) | ESP32 on WiFi `ESL2`              | ✅ reflashed with new firmware; publishes JSON @ QoS 1 to Pi broker |
+| Firmware (flashed) | ESP32 on WiFi `YOUR_SSID`              | ✅ reflashed with new firmware; publishes JSON @ QoS 1 to Pi broker |
 | Firmware (source)  | `firmware/src/firmware/firmware.ino` | ✅ MQTT lib swapped, JSON, QoS 1 (LWT still TBD) |
 | Grafana dashboard  | `Temperature & Humidity` (uid `ad8k4s5`) | ✅ cloned from laptop → Pi via API; InfluxDB datasource uid pinned so panels resolve unchanged |
 | Laptop docker stack | `weatherstation_docker/`          | ✅ stopped (`docker compose down`) after dashboard export |
