@@ -194,3 +194,30 @@ The current setup uses anonymous MQTT, an unauthenticated Modbus TCP slave, and 
 1. Enable authentication in `mosquitto.conf` and update client credentials in `firmware.ino`.
 2. Keep the ESP32's Modbus TCP port (502) off any untrusted network — it has no authentication.
 3. Change default passwords in `docker-compose.yml`.
+
+## Roadmap / Further Development
+
+Items below are tracked for moving this stack from "trusted LAN" to "production-ready". Ordered by priority. See `PROGRESS.md` for the living checklist.
+
+### Critical (before any remote exposure)
+- **Secrets out of git** — move `mysecrettoken`, InfluxDB/Grafana passwords, and the Cloudflare tunnel token out of `docker-compose.yml` / `telegraf.conf` into a `.env` file (gitignored), referenced via `${VAR}` syntax. Rotate all tokens/passwords after.
+- **MQTT authentication** — disable `allow_anonymous` in `mosquitto.conf`, generate a password file (`mosquitto_passwd`), and update `firmware.ino` to authenticate on connect.
+- **Modbus TCP scope** — keep port 502 isolated on a trusted VLAN; it has no authentication by design.
+
+### High priority
+- **Pin Docker image versions** — replace `:latest` with explicit tags for `mosquitto`, `grafana`, and `cloudflared` for reproducible deploys.
+- **MQTT Last Will & Testament** — publish `sensors/esp32/online=1` on connect, LWT `sensors/esp32/online=0` so Grafana can flag an offline ESP32.
+- **InfluxDB backups** — weekly `influx backup` cron on the Pi, pushed to off-device storage.
+- **Firmware OTA** — eliminate the USB round-trip for firmware updates (ArduinoOTA or HTTP update server).
+- **Firmware data buffering** — ring buffer of recent readings so MQTT reconnect gaps don't lose data.
+
+### Medium priority
+- **Container health checks** — add `healthcheck:` blocks so Docker restarts stuck containers.
+- **Resource limits** — `mem_limit` / `cpus:` on each service to protect the Pi from a runaway container.
+- **Mosquitto log rotation** — currently unbounded.
+- **TLS everywhere** — MQTT over port 8883 with a cert, InfluxDB/Grafana behind TLS even on LAN.
+
+### Nice to have
+- Multiple ESP32 nodes with distinct client IDs and topic prefixes.
+- Grafana alerting (temperature thresholds → push notification / email).
+- Dashboard provisioning via Grafana's file-based config instead of API import.

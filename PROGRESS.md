@@ -58,13 +58,45 @@ _Snapshot as of 2026-04-17._
 ## Pending / open items
 
 - [x] **Remote access to Grafana** — Cloudflare Tunnel + Cloudflare Access (implemented). Added `cloudflared` service and updated Grafana environment variables.
-- [ ] **Liveness signal** — discussed but not implemented. Add an MQTT Last Will & Testament so `sensors/esp32/online` flips to `"0"` if the ESP32 disconnects ungracefully:
+- [x] **Pi host telemetry** — Telegraf now publishes Pi CPU/RAM/temp metrics direct to InfluxDB. Added `[[inputs.cpu]]`, `mem`, `system`, `disk`, and `file` (CPU temp) with host volume mounts.
+
+## Production readiness — further development plan
+
+Audit on 2026-04-17 identified the following gaps before this stack can be considered production-ready. Ordered by priority.
+
+### 🔴 Critical (blockers for remote exposure)
+
+- [ ] **Move secrets out of git** — `docker-compose.yml` hardcodes `mysecrettoken` (InfluxDB token), `adminpassword` (InfluxDB), `admin/admin` (Grafana). `telegraf.conf` also hardcodes the InfluxDB token. Move to a `.env` file referenced via `${VAR}` syntax; add `.env` to `.gitignore`; rotate all tokens/passwords.
+- [ ] **Enable MQTT authentication** — `mosquitto.conf` has `allow_anonymous true`. Any device on the LAN can publish fake sensor data or snoop telemetry. Generate a password file, set `allow_anonymous false`, update firmware (`mqttClient.connect(CLIENT_ID, user, pass)`).
+- [ ] **Cloudflare tunnel token** — `docker-compose.yml:72` has `TUNNEL_TOKEN=PASTE_YOUR_TOKEN_HERE`. Once real token is pasted it would be committed. Move to `.env`.
+
+### 🟡 High
+
+- [ ] **Pin image versions** — `mosquitto:latest`, `grafana/grafana:latest`, `cloudflared:latest` make upgrades non-deterministic. Pin to explicit tags.
+- [ ] **MQTT Last Will & Testament** — no way to detect ESP32 crashes/disconnects:
    ```cpp
    mqttClient.setWill("sensors/esp32/online", "0", true, 1);   // in setup
    mqttClient.publish("sensors/esp32/online", "1", true, 1);   // after successful connect
    ```
-- [x] **Pi host telemetry** — Telegraf now publishes Pi CPU/RAM/temp metrics direct to InfluxDB. Added `[[inputs.cpu]]`, `mem`, `system`, `disk`, and `file` (CPU temp) with host volume mounts.
-- [ ] **Security hardening** — currently anonymous MQTT, anonymous Modbus TCP, default InfluxDB/Grafana passwords. Fine for trusted LAN, critical to address before any remote exposure.
+- [ ] **InfluxDB backup strategy** — a disk failure on the Pi loses all history. Add weekly `influx backup` cron → external storage.
+- [ ] **Firmware OTA** — currently requires USB to update. Consider ArduinoOTA or ESPAsyncHTTPUpdateServer.
+- [ ] **Firmware data buffering** — if MQTT reconnect takes time, sensor readings are dropped. Buffer last N readings in a ring buffer and replay on reconnect.
+
+### 🟢 Medium
+
+- [ ] **Container health checks** — no `healthcheck:` blocks. Docker can't auto-restart stuck containers.
+- [ ] **Resource limits** — no `mem_limit` / `cpus:` constraints; a runaway container can OOM the Pi.
+- [ ] **Mosquitto log rotation** — `mosquitto.log` grows unbounded in the volume.
+- [ ] **Remove placeholder** — `GF_SERVER_ROOT_URL=https://grafana.yourdomain.com` in compose is a dead placeholder until the real hostname is decided.
+- [ ] **Modbus TCP hardening** — port 502 has no auth. Keep off untrusted networks (already documented, just reiterate on deployment).
+
+### ✅ What's already production-grade
+
+- `secrets.h` properly gitignored with a template (`secrets.h.example`).
+- Firmware uses non-blocking MQTT reconnect so `mb.task()` keeps servicing TCP clients.
+- RTU CRC-16 validation on every poll.
+- Telegraf JSON parsing is clean and flattens each key into its own `_field`.
+- Git history is clean — no WiFi/MQTT credentials ever committed.
 
 ## Useful commands
 
