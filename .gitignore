@@ -8,8 +8,6 @@ build/
 .vscode/
 
 # Local/Secret files (already handled but good to have)
-# We keep secrets.h as a template or dummy for now since it's already in history
-# but in a real repo we would ignore it and provide secrets.h.example
 
 # Docker data (if volumes were local)
 weatherstation_docker/influxdb_data/
@@ -21,3 +19,4 @@ weatherstation_docker/mosquitto_log/
 *.json
 !weatherstation_docker/dashboard_template.json
 !weatherstation_docker/pi_telemetry_template.json
+firmware/src/firmware/secrets.h
