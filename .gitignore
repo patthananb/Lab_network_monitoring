@@ -1,0 +1,22 @@
+# System files
+.DS_Store
+Thumbs.db
+
+# Arduino/PlatformIO
+build/
+.pio/
+.vscode/
+
+# Local/Secret files (already handled but good to have)
+# We keep secrets.h as a template or dummy for now since it's already in history
+# but in a real repo we would ignore it and provide secrets.h.example
+
+# Docker data (if volumes were local)
+weatherstation_docker/influxdb_data/
+weatherstation_docker/grafana_data/
+weatherstation_docker/mosquitto_data/
+weatherstation_docker/mosquitto_log/
+
+# Temporary files
+*.json
+!updated_dashboard.json # if you wanted to keep it, but we already deleted it
