@@ -69,6 +69,7 @@
               "mode": "off"
             }
           },
+          "displayName": "Temperature",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -172,6 +173,7 @@
               "mode": "off"
             }
           },
+          "displayName": "Humidity",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -239,6 +241,7 @@
           "color": {
             "mode": "thresholds"
           },
+          "displayName": "Status",
           "thresholds": {
             "mode": "absolute",
             "steps": [
