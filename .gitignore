@@ -20,3 +20,4 @@ weatherstation_docker/mosquitto_log/
 # Temporary files
 *.json
 !weatherstation_docker/dashboard_template.json
+!weatherstation_docker/pi_telemetry_template.json
