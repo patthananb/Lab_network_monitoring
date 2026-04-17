@@ -4,9 +4,12 @@ This project implements a weather monitoring system using an ESP32-S3, an XY-MD0
 
 ## Architecture
 - **Sensor**: XY-MD02 (Temperature & Humidity) via RS485 (Modbus RTU).
-- **Edge Device**: ESP32-S3 (Waveshare Relay Board) polling the sensor and publishing to MQTT.
+- **Edge Device**: ESP32-S3 (Waveshare Relay Board). Polls the sensor every 2 s and:
+  - Publishes a JSON telemetry message to MQTT at QoS 1 (`sensors/esp32/data`).
+  - Exposes the same reading as a Modbus TCP Slave on port 502.
+  - Advertises itself over mDNS as `esp32s3-weather.local`.
 - **Broker**: Eclipse Mosquitto (MQTT).
-- **Collector**: Telegraf (Subscribes to MQTT topics and writes to InfluxDB).
+- **Collector**: Telegraf — subscribes to the MQTT topic and parses JSON into InfluxDB.
 - **Storage**: InfluxDB v2.
 - **Visualization**: Grafana.
 
@@ -18,26 +21,28 @@ This project implements a weather monitoring system using an ESP32-S3, an XY-MD0
 ## Software Requirements
 - **Arduino IDE** with ESP32 Board Support.
 - **Libraries**:
-  - `PubSubClient` by Nick O'Leary.
+  - `MQTT` by Joel Gaehwiler (256dpi/arduino-mqtt) — QoS 1 publisher.
+  - `modbus-esp8266` by emelianov — Modbus TCP Slave.
 - **Docker & Docker Compose**.
 
 ## Project Structure
 ```text
 .
-├── docker/
+├── weatherstation_docker/
 │   ├── docker-compose.yml   # TIG + MQTT Stack
-│   ├── mosquitto.conf      # MQTT Broker Config
-│   └── telegraf.conf       # Data Collection Config
+│   ├── mosquitto.conf       # MQTT Broker Config
+│   └── telegraf.conf        # Data Collection Config (JSON parser, QoS 1, Pi metrics)
 └── firmware/
     └── src/
-        ├── firmware.ino    # ESP32 Source Code
-        └── secrets.h       # WiFi & MQTT Credentials
+        └── firmware/
+            ├── firmware.ino # ESP32 Source Code (RTU master + TCP slave + MQTT)
+            └── secrets.h    # WiFi & MQTT Credentials
 ```
 
 ## Getting Started
 
 ### 1. Docker Setup (Local Development)
-1. Navigate to the `docker/` directory.
+1. Navigate to the `weatherstation_docker/` directory.
 2. Run the stack:
    ```bash
    docker-compose up -d
@@ -48,15 +53,43 @@ This project implements a weather monitoring system using an ESP32-S3, an XY-MD0
    - **Grafana**: `localhost:3000` (User: `admin`, Pass: `admin`)
 
 ### 2. Firmware Configuration
-1. Open `firmware/src/firmware.ino` in Arduino IDE.
-2. Edit `firmware/src/secrets.h`:
+1. Open `firmware/src/firmware/firmware.ino` in Arduino IDE.
+2. Edit `firmware/src/firmware/secrets.h`:
    - Set `WIFI_SSID` and `WIFI_PASS`.
    - Set `MQTT_BROKER` to your computer's local IP address (e.g., `192.168.1.50`).
-3. Select Board: **ESP32S3 Dev Module**.
-4. Enable **USB CDC On Boot** in Tools menu.
-5. Upload to ESP32-S3.
+3. In **Library Manager**, install:
+   - **MQTT** by Joel Gaehwiler (`256dpi/arduino-mqtt`).
+   - **modbus-esp8266** by emelianov.
+4. Select Board: **ESP32S3 Dev Module**.
+5. Enable **USB CDC On Boot** in Tools menu.
+6. Upload to ESP32-S3.
 
-### 3. Grafana Visualization
+On boot the serial monitor (115200) prints the assigned IP, mDNS hostname, and MQTT connection status.
+
+### 3. Modbus TCP (Optional Verification)
+The firmware also serves the most-recent sensor reading over Modbus TCP on port 502, advertised via mDNS as `esp32s3-weather.local`.
+
+Install `mbpoll`:
+```bash
+brew install mbpoll          # macOS
+sudo apt install mbpoll      # Raspberry Pi / Debian
+```
+
+Poll all four holding registers at 1 Hz (Ctrl-C to stop):
+```bash
+mbpoll -a 1 -t 4 -r 1 -c 4 esp32s3-weather.local
+```
+
+Holding register map (FC03, 0-based):
+
+| HREG | Field       | Encoding                                   |
+|------|-------------|--------------------------------------------|
+| 0    | Temperature | raw × 0.1 °C, signed (e.g. `249` = 24.9)   |
+| 1    | Humidity    | raw × 0.1 %RH, unsigned (e.g. `486` = 48.6)|
+| 2    | Status      | 0=OK, 1=timeout, 2=CRC err, 3=exception    |
+| 3    | Poll count  | uint16, increments per RTU poll (rolls at 65535) |
+
+### 4. Grafana Visualization
 1. Log in to Grafana at `http://localhost:3000`.
 2. Add a **Data Source**:
    - Type: **InfluxDB**.
@@ -65,23 +98,99 @@ This project implements a weather monitoring system using an ESP32-S3, an XY-MD0
    - Org: `weatherstation`.
    - Token: `mysecrettoken`.
    - Bucket: `sensors`.
-3. Create a Dashboard and add panels for Temperature and Humidity.
-   - Example Flux Query for Temperature:
-     ```flux
-     from(bucket: "sensors")
-       |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
-       |> filter(fn: (r) => r["_measurement"] == "mqtt_consumer")
-       |> filter(fn: (r) => r["topic"] == "sensors/esp32/temperature")
-       |> yield(name: "mean")
-     ```
+3. Create a Dashboard and add panels using the Flux queries below.
+
+#### Flux Queries
+
+The ESP32 publishes a single JSON message to `sensors/esp32/data` at QoS 1. Telegraf flattens each JSON key into its own field under measurement `weather`:
+
+| `_field`      | Source             | Notes                                      |
+|---------------|--------------------|--------------------------------------------|
+| `temperature` | `temperature` key  | °C, float                                  |
+| `humidity`    | `humidity` key     | %RH, float                                 |
+| `status`      | `status` key       | 0=OK, 1=timeout, 2=CRC err, 3=exception    |
+| `poll_count`  | `poll_count` key   | RTU cycles since boot                      |
+
+**Temperature (°C):**
+```flux
+from(bucket: "sensors")
+  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+  |> filter(fn: (r) => r["_measurement"] == "weather")
+  |> filter(fn: (r) => r["_field"] == "temperature")
+  |> yield(name: "temperature")
+```
+
+**Humidity (%RH):**
+```flux
+from(bucket: "sensors")
+  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+  |> filter(fn: (r) => r["_measurement"] == "weather")
+  |> filter(fn: (r) => r["_field"] == "humidity")
+  |> yield(name: "humidity")
+```
+
+**ESP Status:**
+```flux
+from(bucket: "sensors")
+  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+  |> filter(fn: (r) => r["_measurement"] == "weather")
+  |> filter(fn: (r) => r["_field"] == "status")
+  |> yield(name: "status")
+```
+
+**Poll Count:**
+```flux
+from(bucket: "sensors")
+  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+  |> filter(fn: (r) => r["_measurement"] == "weather")
+  |> filter(fn: (r) => r["_field"] == "poll_count")
+  |> yield(name: "poll_count")
+```
+
+**All fields in one query** (Grafana splits series by `_field`):
+```flux
+from(bucket: "sensors")
+  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+  |> filter(fn: (r) => r["_measurement"] == "weather")
+```
+
+#### Query Variants
+
+- **Smoothed for time-series panels** — insert before `yield`:
+  ```flux
+    |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)
+  ```
+- **Latest value for Stat / Gauge panels** — append instead of or after `yield`:
+  ```flux
+    |> last()
+  ```
+
+### 5. Pi Host Telemetry
+Telegraf is configured to collect host metrics from the Raspberry Pi. This data is stored in the same `sensors` bucket.
+
+**Measurements available:**
+- `cpu`: `usage_user`, `usage_system`, `usage_idle`, etc.
+- `mem`: `used_percent`, `available`, etc.
+- `system`: `load1`, `uptime`, etc.
+- `disk`: `free`, `used_percent`, etc.
+- `pi_cpu_temp`: raw value in milli-Celsius (divide by 1000 for °C).
+
+**Example Flux Query for Pi CPU Temp (°C):**
+```flux
+from(bucket: "sensors")
+  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+  |> filter(fn: (r) => r["_measurement"] == "pi_cpu_temp")
+  |> map(fn: (r) => ({ r with _value: float(v: r._value) / 1000.0 }))
+  |> yield(name: "pi_cpu_temp")
+```
 
 ## Moving to Raspberry Pi
-1. Copy the `docker/` directory to your Raspberry Pi.
-2. Run `docker-compose up -d` on the Pi.
-3. Update `MQTT_BROKER` in `secrets.h` to the Pi's IP address and re-upload the firmware.
+1. Copy the `weatherstation_docker/` directory to your Raspberry Pi.
+2. Run `docker compose up -d` on the Pi.
+3. Update `MQTT_BROKER` in `firmware/src/firmware/secrets.h` to the Pi's IP address and re-upload the firmware.
 
 ## Security Note
-The current setup uses anonymous MQTT and default credentials for InfluxDB/Grafana. For production use, please:
-1. Enable authentication in `mosquitto.conf`.
-2. Update MQTT client credentials in `firmware.ino`.
+The current setup uses anonymous MQTT, an unauthenticated Modbus TCP slave, and default credentials for InfluxDB/Grafana. For production use, please:
+1. Enable authentication in `mosquitto.conf` and update client credentials in `firmware.ino`.
+2. Keep the ESP32's Modbus TCP port (502) off any untrusted network — it has no authentication.
 3. Change default passwords in `docker-compose.yml`.
