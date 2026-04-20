@@ -347,6 +347,219 @@ from(bucket: "sensors")
   |> sort(columns: ["_time"], desc: true)
 ```
 
+---
+
+## Kiosk Display Setup (Raspberry Pi OS Lite + 7" Touchscreen)
+
+This section covers turning a Raspberry Pi 4 running **Raspberry Pi OS Lite** (headless, no desktop) into a dedicated full-screen Grafana kiosk using a 7" touchscreen display. The result is a Pi that boots straight into the Grafana playlist with no login prompt, no mouse cursor, and no visible browser UI.
+
+### Hardware Requirements
+
+- Raspberry Pi 4 (2 GB or more recommended)
+- Raspberry Pi Official 7" Touchscreen Display (800×480)
+- MicroSD card with **Raspberry Pi OS Lite (64-bit)** flashed
+- Power supply (5V 3A USB-C)
+
+### Overview of What Gets Installed
+
+| Package | Purpose |
+|---|---|
+| `xserver-xorg` | Minimal X11 display server |
+| `x11-xserver-utils` | `xset` utility for disabling screen blanking |
+| `xinit` | `startx` command to launch X from the console |
+| `openbox` | Lightweight window manager (no taskbar, no desktop) |
+| `chromium` | Browser for rendering Grafana in kiosk mode |
+| `unclutter` | Hides the mouse cursor when idle |
+
+---
+
+### Step 1 — Install Display Packages
+
+SSH into the Pi (or connect a keyboard) and run:
+
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install --no-install-recommends \
+  xserver-xorg x11-xserver-utils xinit \
+  openbox chromium unclutter -y
+```
+
+> **Note:** On Raspberry Pi OS Trixie and newer the package is `chromium`, not `chromium-browser`.
+
+---
+
+### Step 2 — Configure Openbox Autostart
+
+Openbox reads `~/.config/openbox/autostart` when a session starts. This file disables screen sleep and launches Chromium pointed at the Grafana playlist.
+
+```bash
+mkdir -p ~/.config/openbox
+nano ~/.config/openbox/autostart
+```
+
+Paste the following:
+
+```bash
+# Disable screen blanking and power saving
+xset s off
+xset s noblank
+xset -dpms
+
+# Hide the mouse cursor after 0.1 seconds of inactivity
+unclutter -idle 0.1 -root &
+
+# Launch Chromium in kiosk mode pointed at the Grafana playlist
+chromium --noerrdialogs --disable-infobars \
+  --kiosk --touch-events=enabled \
+  "http://localhost:3000/playlists/play/<YOUR_PLAYLIST_UID>?kiosk=true" &
+```
+
+Replace `<YOUR_PLAYLIST_UID>` with your playlist's UID (see [Finding the Playlist UID](#finding-the-playlist-uid) below).
+
+**Chromium flags explained:**
+
+| Flag | Effect |
+|---|---|
+| `--noerrdialogs` | Suppresses crash/error popup dialogs |
+| `--disable-infobars` | Removes the "Chrome is being controlled…" banner |
+| `--kiosk` | Full-screen mode, no address bar, no window chrome |
+| `--touch-events=enabled` | Enables touch input for the 7" display |
+
+---
+
+### Step 3 — Enable Grafana Anonymous Access
+
+By default Grafana requires a login. For a kiosk display you want it to open without any credentials. Add two environment variables to the Grafana service in `docker/docker-compose.yml`:
+
+```yaml
+grafana:
+  image: grafana/grafana:latest
+  environment:
+    - GF_SECURITY_ADMIN_USER=admin
+    - GF_SECURITY_ADMIN_PASSWORD=admin
+    - GF_AUTH_ANONYMOUS_ENABLED=true        # ← add this
+    - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer     # ← add this
+```
+
+Then recreate the container to apply:
+
+```bash
+cd ~/weather-station/docker
+docker compose up -d grafana
+```
+
+Verify it works without credentials:
+
+```bash
+curl http://localhost:3000/api/playlists
+# Should return JSON without asking for a password
+```
+
+---
+
+### Step 4 — Auto-Login and Start X on Boot
+
+**4a. Enable console autologin via raspi-config:**
+
+```bash
+sudo raspi-config
+# → System Options → Boot / Auto Login → Console Autologin
+```
+
+Or non-interactively:
+
+```bash
+sudo raspi-config nonint do_boot_behaviour B2
+```
+
+This makes the Pi log in as the `pi` user automatically on boot instead of showing a login prompt.
+
+**4b. Tell the shell to start X automatically:**
+
+Add the following line to `~/.bash_profile` so that X launches when the Pi logs in on virtual terminal 1:
+
+```bash
+echo '[[ -z $DISPLAY && $XDG_VTNR -eq 1 ]] && startx' >> ~/.bash_profile
+```
+
+**What this does:**
+- `$DISPLAY` is empty → X is not already running
+- `$XDG_VTNR -eq 1` → we are on the primary virtual terminal (the one autologin uses)
+- If both are true, `startx` is called which reads `~/.config/openbox/autostart`
+
+---
+
+### Step 5 — Reboot
+
+```bash
+sudo reboot
+```
+
+Boot sequence:
+1. Pi powers on → kernel boots
+2. systemd starts getty on tty1 → autologin kicks in as `pi`
+3. `.bash_profile` runs → `startx` is called
+4. X server starts → Openbox session begins
+5. `~/.config/openbox/autostart` runs → Chromium opens the Grafana playlist in fullscreen
+
+---
+
+### Finding the Playlist UID
+
+Query the Grafana API to list all playlists and find the UID:
+
+```bash
+# If anonymous access is enabled:
+curl http://localhost:3000/api/playlists
+
+# If you still need credentials:
+curl -u admin:admin http://localhost:3000/api/playlists
+```
+
+Example response:
+
+```json
+[
+  {
+    "uid": "ad6vm6w",
+    "name": "DashEins",
+    "interval": "1m"
+  }
+]
+```
+
+The kiosk URL is then:
+
+```
+http://localhost:3000/playlists/play/ad6vm6w?kiosk=true
+```
+
+---
+
+### Display Rotation (Optional)
+
+If the 7" touchscreen is mounted in a non-default orientation, add to `/boot/firmware/config.txt`:
+
+```ini
+# 0=normal, 1=90°, 2=180°, 3=270°
+display_rotate=0
+```
+
+---
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| Black screen after boot | Check `~/.bash_profile` contains the `startx` line; check `~/.xsession-errors` for X errors |
+| Grafana login page appears | Confirm `GF_AUTH_ANONYMOUS_ENABLED=true` is set and container was recreated (`docker compose up -d grafana`) |
+| Chromium shows "Restore pages?" dialog | Add `--disable-session-crashed-bubble` to Chromium flags in `autostart` |
+| Screen goes blank after a few minutes | Confirm `xset s off`, `xset s noblank`, and `xset -dpms` are all present in `autostart` |
+| Touch input not working | Confirm `--touch-events=enabled` flag is in Chromium command; check `xinput list` for the touchscreen device |
+| `chromium: command not found` | Run `which chromium-browser` — if found, update the command in `autostart` accordingly |
+
+---
+
 ## Moving to Raspberry Pi
 1. Copy the `weatherstation_docker/` directory to your Raspberry Pi.
 2. Run `docker compose up -d` on the Pi.
