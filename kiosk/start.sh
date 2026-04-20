@@ -7,8 +7,6 @@ xset -dpms
 
 unclutter -idle 0.1 -root &
 
-python3 -m http.server 8080 --directory /home/pi/kiosk &
-
 until curl -s http://localhost:3000/api/health > /dev/null 2>&1; do
   sleep 2
 done
@@ -16,6 +14,6 @@ done
 while true; do
   chromium --noerrdialogs --disable-infobars \
     --kiosk --touch-events=enabled \
-    http://localhost:8080
+    "http://localhost:3000/playlists/play/ad6vm6w?kiosk=true"
   sleep 3
 done
