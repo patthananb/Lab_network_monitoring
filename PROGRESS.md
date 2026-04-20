@@ -87,7 +87,14 @@ Audit on 2026-04-17 identified the following gaps before this stack can be consi
 - [ ] **Container health checks** — no `healthcheck:` blocks. Docker can't auto-restart stuck containers.
 - [ ] **Resource limits** — no `mem_limit` / `cpus:` constraints; a runaway container can OOM the Pi.
 - [ ] **Mosquitto log rotation** — `mosquitto.log` grows unbounded in the volume.
+- [ ] **TLS everywhere** — MQTT over port 8883 with a cert, InfluxDB/Grafana behind TLS even on LAN.
 - [ ] **Remove placeholder** — `GF_SERVER_ROOT_URL=https://grafana.yourdomain.com` in compose is a dead placeholder until the real hostname is decided.
+
+### 🔵 Nice to have
+
+- [ ] **Multiple ESP32 nodes** — distinct client IDs and topic prefixes.
+- [ ] **Grafana alerting** — temperature thresholds → push notification / email.
+- [ ] **Dashboard provisioning** — use Grafana's file-based config instead of manual API import.
 - [ ] **Modbus TCP hardening** — port 502 has no auth. Keep off untrusted networks (already documented, just reiterate on deployment).
 
 ### ✅ What's already production-grade
