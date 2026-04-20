@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; }
+    iframe { width: 100vw; height: 100vh; border: none; display: block; }
+  </style>
+</head>
+<body>
+  <iframe id="frame" src=""></iframe>
+  <script>
+    const INTERVAL = 5000;
+    const BASE = 'http://localhost:3000';
+    const TIME = '&from=now-24h&to=now&kiosk=true';
+
+    const pages = [
+      BASE + '/d/adfwxqs/pi-telemetry?viewPanel=1'  + TIME,
+      BASE + '/d/adfwxqs/pi-telemetry?viewPanel=7'  + TIME,
+      BASE + '/d/adfwxqs/pi-telemetry?viewPanel=9'  + TIME,
+      BASE + '/d/adfwxqs/pi-telemetry?viewPanel=3'  + TIME,
+      BASE + '/d/ad8k4s5/temperature-and-humidity?viewPanel=1' + TIME,
+      BASE + '/d/ad8k4s5/temperature-and-humidity?viewPanel=2' + TIME,
+      BASE + '/d/ad8k4s5/temperature-and-humidity?viewPanel=3' + TIME,
+    ];
+
+    let i = 0;
+    const frame = document.getElementById('frame');
+
+    function next() {
+      frame.src = pages[i];
+      i = (i + 1) % pages.length;
+    }
+
+    next();
+    setInterval(next, INTERVAL);
+  </script>
+</body>
+</html>

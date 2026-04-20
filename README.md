@@ -21,6 +21,8 @@ docker-compose up -d
 5. Upload.
 
 ## 🏗️ Architecture
+![Dataflow](dataflow.png)
+
 - **ESP32-S3**: Polls sensor via RS485 (Modbus RTU), publishes JSON to MQTT, and serves as Modbus TCP Slave.
 - **TIG Stack**: Dockerized Telegraf (collection), InfluxDB (storage), and Grafana (visualization).
 - **Network**: Uses mDNS (`esp32s3-weather.local`) for easy discovery.
@@ -31,7 +33,10 @@ docker-compose up -d
 1. Connect InfluxDB as a data source (Flux, `http://influxdb:8086`, Org: `weatherstation`, Token: `mysecrettoken`).
 2. Build dashboards using the telemetry fields: `temperature`, `humidity`, `status`, `poll_count`.
 
-> 💡 **Detailed Flux queries** for all metrics can be found in [docs/flux_queries.md](docs/flux_queries.md).
+### Documentation
+- 💡 **[Flux Queries](docs/flux_queries.md)** — Detailed queries for all metrics.
+- 📈 **[Querying Guide](docs/querying_guide.md)** — Advanced patterns and Grafana variables.
+- 📺 **[Kiosk Setup](docs/kiosk_setup.md)** — Dedicated 7" touchscreen display instructions.
 
 <details>
 <summary><b>🔍 Optional: Modbus TCP Verification</b></summary>
