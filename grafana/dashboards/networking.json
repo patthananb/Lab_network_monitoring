@@ -1,0 +1,270 @@
+{
+  "editable": true,
+  "id": 1460598123700224,
+  "panels": [
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "cfjcdjfdsip6oa"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "displayName": "Status",
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "Up"
+                },
+                "1": {
+                  "color": "red",
+                  "index": 1,
+                  "text": "Down"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "pluginVersion": "13.0.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "cfjcdjfdsip6oa"
+          },
+          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ping\")\n  |> filter(fn: (r) => r[\"_field\"] == \"result_code\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "Current Internet Status",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "cfjcdjfdsip6oa"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "fillOpacity": 70,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineWidth": 0,
+            "spanNulls": false
+          },
+          "displayName": "Status",
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "Up"
+                },
+                "1": {
+                  "color": "red",
+                  "index": 1,
+                  "text": "Down"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "id": 5,
+      "options": {
+        "alignValue": "left",
+        "annotations": {
+          "clustering": -1,
+          "multiLane": false
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "mergeValues": true,
+        "rowHeight": 0.9,
+        "showValue": "auto",
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "13.0.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "cfjcdjfdsip6oa"
+          },
+          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ping\")\n  |> filter(fn: (r) => r[\"_field\"] == \"result_code\")\n  |> aggregateWindow(every: 5m, fn: last, createEmpty: false)",
+          "refId": "A"
+        }
+      ],
+      "title": "Internet Connectivity Timeline",
+      "type": "state-timeline"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "cfjcdjfdsip6oa"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "color-background"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [
+            {
+              "options": {
+                "1": {
+                  "color": "red",
+                  "index": 1,
+                  "text": "Outage Detected"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "id": 6,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "13.0.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "cfjcdjfdsip6oa"
+          },
+          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"ping\")\n  |> filter(fn: (r) => r[\"_field\"] == \"result_code\")\n  |> filter(fn: (r) => r._value > 0)\n  |> map(fn: (r) => ({ _time: r._time, status: \"Offline\", result_code: r._value }))\n  |> sort(columns: [\"_time\"], desc: true)",
+          "refId": "A"
+        }
+      ],
+      "title": "Outage Log (Recent Downtime Events)",
+      "type": "table"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 42,
+  "tags": [],
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Networking",
+  "uid": "e49fc0a3-1c3f-4bdc-a5eb-90ca6d863dbe",
+  "version": 1
+}
