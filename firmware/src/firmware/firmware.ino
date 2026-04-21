@@ -223,10 +223,7 @@ unsigned long lastPoll      = 0;
 unsigned long lastWifiCheck = 0;
 unsigned long lastMqttTry   = 0;
 
-void loop() {
-    mb.task();
-    mqttClient.loop();
-
+void handleNetworkWatchdogs() {
     /* WiFi watchdog */
     if (millis() - lastWifiCheck >= WIFI_RECONNECT_INTERVAL) {
         lastWifiCheck = millis();
@@ -243,7 +240,9 @@ void loop() {
         lastMqttTry = millis();
         tryMqttReconnect();
     }
+}
 
+void handleSensorPolling() {
     /* Poll XY-MD02 at interval */
     if (millis() - lastPoll >= POLL_INTERVAL_MS) {
         lastPoll = millis();
@@ -287,4 +286,11 @@ void loop() {
             Serial.printf("XY-MD02: ERROR (status=%d)\n", status);
         }
     }
+}
+
+void loop() {
+    mb.task();
+    mqttClient.loop();
+    handleNetworkWatchdogs();
+    handleSensorPolling();
 }
