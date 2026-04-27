@@ -60,6 +60,21 @@ _Snapshot as of 2026-04-17._
 - [x] **Remote access to Grafana** — Cloudflare Tunnel + Cloudflare Access (implemented). Added `cloudflared` service and updated Grafana environment variables.
 - [x] **Pi host telemetry** — Telegraf now publishes Pi CPU/RAM/temp metrics direct to InfluxDB. Added `[[inputs.cpu]]`, `mem`, `system`, `disk`, and `file` (CPU temp) with host volume mounts.
 
+## Project re-review TODO
+
+Added 2026-04-27 as a checklist for the next full project pass.
+
+- [ ] **Firmware integration review** — verify XY-MD02 and SDM120 can share the RS485 bus reliably, confirm SDM120 address `0x02`, FC04 register reads, float word order, timeout behavior, and serial output on real hardware.
+- [ ] **MQTT payload review** — tail `sensors/esp32/data` from Mosquitto and confirm weather fields, SDM120 fields, `status`, `power_status`, and omitted-value behavior during device errors.
+- [ ] **InfluxDB/Telegraf review** — confirm the expanded JSON fields are parsed as numeric fields under measurement `weather` with no type conflicts from older data.
+- [ ] **Grafana review** — add or update dashboard panels for voltage, current, watts, VA, VAr, power factor, frequency, energy, and SDM120 status.
+- [ ] **Modbus TCP review** — poll `HR0..HR20`, decode SDM120 IEEE754 float register pairs, and document the exact verification command/output.
+- [ ] **Docs review** — refresh README, QUICK_START, Flux examples, kiosk docs, and `dataflow.png` so architecture diagrams and examples match the current firmware.
+- [ ] **Deployment review** — reconcile duplicate `docker/` and `weatherstation_docker/` configs, confirm the Pi deployment path, and make sure compose files match the deployed stack.
+- [ ] **Security review** — revisit MQTT authentication, hardcoded Influx/Grafana secrets, Cloudflare tunnel token handling, TLS, and Modbus TCP LAN exposure.
+- [ ] **Operations review** — check backups, container health checks, resource limits, Mosquitto log rotation, and recovery steps after power loss.
+- [ ] **Release readiness review** — decide whether to add CI/build notes for `arduino-cli`, pin library/core versions, and record a known-good firmware upload procedure.
+
 ## Production readiness — further development plan
 
 Audit on 2026-04-17 identified the following gaps before this stack can be considered production-ready. Ordered by priority.
