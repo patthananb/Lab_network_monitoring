@@ -13,6 +13,8 @@ The ESP32 publishes a single JSON message to `sensors/esp32/data` at QoS 1. Tele
 | `status`      | `status` key       | 0=OK, 1=timeout, 2=CRC err, 3=exception    |
 | `poll_count`  | `poll_count` key   | RTU cycles since boot                      |
 
+SDM120 power-meter values are not published to MQTT/InfluxDB yet. They are available from the ESP32 Modbus TCP slave holding registers documented in the README.
+
 ### Temperature (°C)
 ```flux
 from(bucket: "sensors")
