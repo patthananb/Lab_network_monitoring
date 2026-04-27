@@ -12,13 +12,15 @@
  *                                                   +-- mDNS  <SLAVE_HOSTNAME>.local
  *
  * Outputs:
- *   - MQTT: existing weather JSON on sensors/esp32/data at QoS 1
+ *   - MQTT: weather + SDM120 JSON on sensors/esp32/data at QoS 1
  *   - Modbus TCP Holding Registers: weather + SDM120 power meter values
  *
  * MQTT JSON payload:
- *   {"temperature": 24.9, "humidity": 48.6, "status": 0, "poll_count": 142}
- * On weather RTU error only "status" (and "poll_count") are sent.
- * SDM120 MQTT/Influx/Grafana wiring is intentionally left for a later change.
+ *   {"status":0,"poll_count":142,"temperature":24.9,"humidity":48.6,
+ *    "power_status":0,"power_voltage":229.4,"power_current":0.418,
+ *    "power_watts":74.6,"power_apparent_va":77.5,"power_reactive_var":12.0,
+ *    "power_factor":0.96,"power_frequency":50.0,"power_energy_kwh":12.348}
+ * On RTU errors, value fields for the failing device are omitted.
  *
  * TCP Slave Holding Register Map (FC03, 0-based):
  *   HREG 0: Temperature (raw x 0.1 C, signed)
@@ -43,6 +45,7 @@
 #include <MQTT.h>
 #include <ModbusIP_ESP8266.h>
 #include <HardwareSerial.h>
+#include <stdarg.h>
 #include <string.h>
 #include "secrets.h"
 
@@ -50,7 +53,7 @@
 #define CLIENT_ID       "esp32s3-weather-station"
 #define TOPIC_DATA      "sensors/esp32/data"
 #define MQTT_QOS        1
-#define MQTT_BUF_SIZE   256
+#define MQTT_BUF_SIZE   512
 
 /* --- mDNS hostname (advertised as <name>.local) --- */
 #define SLAVE_HOSTNAME  "esp32s3-weather"
@@ -302,22 +305,61 @@ void writePowerHregs(int status, const PowerReading *reading) {
     writeFloatHregs(HREG_POWER_ENERGY_H, HREG_POWER_ENERGY_L, reading->totalActiveEnergy);
 }
 
-void publishWeatherTelemetry(int weatherStatus, int16_t tempRaw,
-                             uint16_t humiRaw, uint16_t currentPollCount) {
+void appendPayload(char *payload, size_t payloadSize, size_t *len, const char *format, ...) {
+    if (*len >= payloadSize) return;
+
+    va_list args;
+    va_start(args, format);
+    int written = vsnprintf(payload + *len, payloadSize - *len, format, args);
+    va_end(args);
+
+    if (written < 0) return;
+
+    size_t remaining = payloadSize - *len;
+    if ((size_t)written >= remaining) {
+        *len = payloadSize - 1;
+    } else {
+        *len += (size_t)written;
+    }
+}
+
+void publishTelemetry(int weatherStatus, int16_t tempRaw, uint16_t humiRaw,
+                      uint16_t currentPollCount, int powerStatus,
+                      const PowerReading *powerReading) {
     if (!mqttClient.connected()) return;
 
     char payload[MQTT_BUF_SIZE];
+    size_t len = 0;
+    appendPayload(payload, sizeof(payload), &len,
+                  "{\"status\":%d,\"poll_count\":%u",
+                  weatherStatus, currentPollCount);
+
     if (weatherStatus == MODBUS_OK) {
-        snprintf(payload, sizeof(payload),
-                 "{\"temperature\":%.1f,\"humidity\":%.1f,"
-                 "\"status\":0,\"poll_count\":%u}",
-                 tempRaw / 10.0, humiRaw / 10.0, currentPollCount);
-    } else {
-        snprintf(payload, sizeof(payload),
-                 "{\"status\":%d,\"poll_count\":%u}",
-                 weatherStatus, currentPollCount);
+        appendPayload(payload, sizeof(payload), &len,
+                      ",\"temperature\":%.1f,\"humidity\":%.1f",
+                      tempRaw / 10.0, humiRaw / 10.0);
     }
 
+    appendPayload(payload, sizeof(payload), &len,
+                  ",\"power_status\":%d", powerStatus);
+
+    if (powerStatus == MODBUS_OK) {
+        appendPayload(payload, sizeof(payload), &len,
+                      ",\"power_voltage\":%.1f,\"power_current\":%.3f,"
+                      "\"power_watts\":%.1f,\"power_apparent_va\":%.1f,"
+                      "\"power_reactive_var\":%.1f,\"power_factor\":%.3f,"
+                      "\"power_frequency\":%.1f,\"power_energy_kwh\":%.3f",
+                      powerReading->voltage,
+                      powerReading->current,
+                      powerReading->activePower,
+                      powerReading->apparentPower,
+                      powerReading->reactivePower,
+                      powerReading->powerFactor,
+                      powerReading->frequency,
+                      powerReading->totalActiveEnergy);
+    }
+
+    appendPayload(payload, sizeof(payload), &len, "}");
     mqttClient.publish(TOPIC_DATA, payload, false, MQTT_QOS);
 }
 
@@ -475,7 +517,8 @@ void handleSensorPolling() {
             Serial.printf("SDM120: ERROR (status=%d)\n", powerStatus);
         }
 
-        publishWeatherTelemetry(weatherStatus, tempRaw, humiRaw, pollCount);
+        publishTelemetry(weatherStatus, tempRaw, humiRaw, pollCount,
+                         powerStatus, &powerReading);
     }
 }
 

@@ -422,7 +422,7 @@ mDNS: esp32s3-weather.local
 MQTT connected to 192.168.1.50:1883
 ```
 
-If you see `MQTT connected`, you're done! The ESP32 is now sending temperature and humidity data every 2 seconds.
+If you see `MQTT connected`, you're done! The ESP32 is now sending temperature, humidity, and SDM120 power meter data every 2 seconds.
 
 ---
 
@@ -440,7 +440,7 @@ docker compose exec mosquitto mosquitto_sub -t "sensors/esp32/data"
 
 You should see JSON printed every 2 seconds:
 ```json
-{"temperature": 24.5, "humidity": 48.3, "status": 0, "poll_count": 1234}
+{"status":0,"poll_count":1234,"temperature":24.5,"humidity":48.3,"power_status":0,"power_voltage":229.4,"power_current":0.418,"power_watts":74.6,"power_apparent_va":77.5,"power_reactive_var":12.0,"power_factor":0.963,"power_frequency":50.0,"power_energy_kwh":12.348}
 ```
 
 Press `Ctrl+C` to stop.
@@ -544,4 +544,3 @@ Look for a device named "Touchscreen" or "ADS7846". If it's not listed, the driv
 - **Hardware issues**: See the Raspberry Pi and ESP32-S3 documentation
 - **Docker issues**: Run `docker compose logs <service-name>` to see what went wrong
 - **Grafana questions**: Browse the [Grafana documentation](https://grafana.com/docs/) or community forums
-

@@ -23,7 +23,7 @@ docker-compose up -d
 ## 🏗️ Architecture
 ![Dataflow](dataflow.png)
 
-- **ESP32-S3**: Polls the XY-MD02 and SDM120 via RS485 (Modbus RTU), publishes existing weather JSON to MQTT, and serves weather plus power-meter values as a Modbus TCP slave.
+- **ESP32-S3**: Polls the XY-MD02 and SDM120 via RS485 (Modbus RTU), publishes weather plus power-meter JSON to MQTT, and serves the same readings as a Modbus TCP slave.
 - **TIG Stack**: Dockerized Telegraf (collection), InfluxDB (storage), and Grafana (visualization).
 - **Network**: Uses mDNS (`esp32s3-weather.local`) for easy discovery.
 
@@ -31,9 +31,7 @@ docker-compose up -d
 
 ### Grafana Setup
 1. Connect InfluxDB as a data source (Flux, `http://influxdb:8086`, Org: `weatherstation`, Token: `mysecrettoken`).
-2. Build dashboards using the weather telemetry fields: `temperature`, `humidity`, `status`, `poll_count`.
-
-Power meter values are currently exposed through the ESP32 Modbus TCP slave only. MQTT, InfluxDB, and Grafana wiring for SDM120 values is intentionally left for a later change.
+2. Build dashboards using the telemetry fields: `temperature`, `humidity`, `status`, `poll_count`, `power_status`, `power_voltage`, `power_current`, `power_watts`, `power_apparent_va`, `power_reactive_var`, `power_factor`, `power_frequency`, and `power_energy_kwh`.
 
 ### Documentation
 - 💡 **[Flux Queries](docs/flux_queries.md)** — Detailed queries for all metrics.
