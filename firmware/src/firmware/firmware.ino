@@ -46,380 +46,24 @@
 #include <MQTT.h>
 #include <ModbusIP_ESP8266.h>
 #include <HardwareSerial.h>
-#include <stdarg.h>
-#include <string.h>
+
+#include "firmware_config.h"
+#include "modbus_rtu.h"
+#include "outputs.h"
 #include "secrets.h"
+#include "sensors.h"
+#include "telemetry_types.h"
 
-/* --- MQTT --- */
-#define CLIENT_ID       "esp32s3-weather-station"
-#define TOPIC_DATA      "sensors/esp32/data"
-#define MQTT_QOS        1
-#define MQTT_BUF_SIZE   512
-
-/* --- mDNS hostname (advertised as <name>.local) --- */
-#define SLAVE_HOSTNAME  "esp32s3-weather"
-
-/* --- RS485 Pins (Waveshare ESP32-S3-Relay-6CH) --- */
-#define RS485_UART_NUM  1
-#define RS485_TX        17
-#define RS485_RX        18
-#define RS485_BAUD      9600
-#define RS485_RX_TIMEOUT_SYMBOLS 1
-
-/* Uncomment if your board needs manual DE/RE direction control: */
-// #define DIR_PIN 4
-
-/* --- XY-MD02 RTU Parameters --- */
-#define XYMD02_ADDR     0x01
-#define XYMD02_FC       0x04    /* FC04: Read Input Registers */
-#define XYMD02_REG      0x0001
-#define XYMD02_QTY      0x0002
-
-/* --- Eastron SDM120 RTU Parameters --- */
-#define SDM120_ADDR                  2
-#define SDM120_FC                    0x04
-#define SDM120_FLOAT_QTY             0x0002
-#define MODBUS_POST_REQUEST_DELAY_MS 1
-#define SDM120_INTER_READ_DELAY_MS   10
-#define SDM120_REG_VOLTAGE           0x0000
-#define SDM120_REG_CURRENT           0x0006
-#define SDM120_REG_ACTIVE_POWER      0x000C
-#define SDM120_REG_APPARENT_POWER    0x0012
-#define SDM120_REG_REACTIVE_POWER    0x0018
-#define SDM120_REG_POWER_FACTOR      0x001E
-#define SDM120_REG_FREQUENCY         0x0046
-#define SDM120_REG_TOTAL_ENERGY      0x0156
-
-/* --- TCP Slave Holding Registers (0-based) --- */
-#define HREG_TEMP              0
-#define HREG_HUMI              1
-#define HREG_STATUS            2
-#define HREG_POLL_CNT          3
-#define HREG_POWER_STATUS      4
-#define HREG_POWER_VOLTAGE_H   5
-#define HREG_POWER_VOLTAGE_L   6
-#define HREG_POWER_CURRENT_H   7
-#define HREG_POWER_CURRENT_L   8
-#define HREG_POWER_WATTS_H     9
-#define HREG_POWER_WATTS_L     10
-#define HREG_POWER_VA_H        11
-#define HREG_POWER_VA_L        12
-#define HREG_POWER_VAR_H       13
-#define HREG_POWER_VAR_L       14
-#define HREG_POWER_PF_H        15
-#define HREG_POWER_PF_L        16
-#define HREG_POWER_FREQ_H      17
-#define HREG_POWER_FREQ_L      18
-#define HREG_POWER_ENERGY_H    19
-#define HREG_POWER_ENERGY_L    20
-
-/* --- Shared RTU status codes --- */
-#define MODBUS_OK              0
-#define MODBUS_TIMEOUT         1
-#define MODBUS_CRC_ERROR       2
-#define MODBUS_EXCEPTION       3
-#define MODBUS_BAD_RESPONSE    4
-
-/* --- Timing --- */
-#define POLL_INTERVAL_MS         2000
-#define SENSOR_SEQUENCE_DELAY_MS 10
-#define WIFI_RECONNECT_INTERVAL  5000
-#define MQTT_RECONNECT_INTERVAL  5000
-
-/* --- Objects --- */
-HardwareSerial RS485(RS485_UART_NUM);
+HardwareSerial  RS485(RS485_UART_NUM);
+ModbusRtuClient rtu(RS485);
 ModbusIP        mb;
 WiFiClient      espClient;
 MQTTClient      mqttClient(MQTT_BUF_SIZE);
 
-struct PowerReading {
-    float voltage;
-    float current;
-    float activePower;
-    float apparentPower;
-    float reactivePower;
-    float powerFactor;
-    float frequency;
-    float totalActiveEnergy;
-};
-
-struct WeatherReading {
-    int status;
-    int16_t temperatureRaw;
-    uint16_t humidityRaw;
-};
-
-struct TelemetrySnapshot {
-    WeatherReading weather;
-    PowerReading power;
-    int powerStatus;
-    uint16_t pollCount;
-};
-
-struct SDM120Param {
-    uint16_t regAddr;
-    const char *name;
-    const char *unit;
-};
-
-const SDM120Param SDM120_PARAMS[] = {
-    {SDM120_REG_VOLTAGE,        "Voltage",             "V"},
-    {SDM120_REG_CURRENT,        "Current",             "A"},
-    {SDM120_REG_ACTIVE_POWER,   "Active Power",        "W"},
-    {SDM120_REG_APPARENT_POWER, "Apparent Power",      "VA"},
-    {SDM120_REG_REACTIVE_POWER, "Reactive Power",      "VAr"},
-    {SDM120_REG_POWER_FACTOR,   "Power Factor",        "-"},
-    {SDM120_REG_FREQUENCY,      "Frequency",           "Hz"},
-    {SDM120_REG_TOTAL_ENERGY,   "Total Active Energy", "kWh"},
-};
-const size_t SDM120_PARAM_COUNT = sizeof(SDM120_PARAMS) / sizeof(SDM120_PARAMS[0]);
-
-/* --- RTU CRC-16 --- */
-uint16_t modbusCRC16(const uint8_t *data, size_t len) {
-    uint16_t crc = 0xFFFF;
-    for (size_t i = 0; i < len; i++) {
-        crc ^= data[i];
-        for (int j = 0; j < 8; j++) {
-            if (crc & 1) {
-                crc >>= 1;
-                crc ^= 0xA001;
-            } else {
-                crc >>= 1;
-            }
-        }
-    }
-    return crc;
-}
-
-/* --- Shared Modbus RTU register reader, returns status code --- */
-int readModbusRegisters(uint8_t slaveAddr, uint8_t functionCode,
-                        uint16_t startReg, uint16_t quantity,
-                        uint16_t *registers, size_t registerCapacity) {
-    if (quantity == 0 || quantity > registerCapacity) {
-        return MODBUS_BAD_RESPONSE;
-    }
-
-    const size_t responseLen = 3 + 2 * quantity + 2;
-    if (responseLen > 64) {
-        return MODBUS_BAD_RESPONSE;
-    }
-
-    uint8_t req[8];
-    req[0] = slaveAddr;
-    req[1] = functionCode;
-    req[2] = (startReg >> 8) & 0xFF;
-    req[3] = startReg & 0xFF;
-    req[4] = (quantity >> 8) & 0xFF;
-    req[5] = quantity & 0xFF;
-    uint16_t crc = modbusCRC16(req, 6);
-    req[6] = crc & 0xFF;
-    req[7] = (crc >> 8) & 0xFF;
-
-    while (RS485.available()) RS485.read();
-
-    #ifdef DIR_PIN
-    digitalWrite(DIR_PIN, HIGH);
-    #endif
-    RS485.write(req, 8);
-    RS485.flush();
-    #ifdef DIR_PIN
-    digitalWrite(DIR_PIN, LOW);
-    #endif
-    delay(MODBUS_POST_REQUEST_DELAY_MS);
-
-    uint8_t resp[64] = {0};
-    size_t rx = RS485.readBytes(resp, responseLen);
-
-    if (rx < responseLen) {
-        if (rx == 5 && resp[0] == slaveAddr && resp[1] == (functionCode | 0x80)) {
-            uint16_t calcCRC = modbusCRC16(resp, 3);
-            uint16_t recvCRC = (uint16_t)resp[3] | ((uint16_t)resp[4] << 8);
-            return calcCRC == recvCRC ? MODBUS_EXCEPTION : MODBUS_CRC_ERROR;
-        }
-        return MODBUS_TIMEOUT;
-    }
-
-    uint16_t calcCRC = modbusCRC16(resp, rx - 2);
-    uint16_t recvCRC = (uint16_t)resp[rx - 2] | ((uint16_t)resp[rx - 1] << 8);
-    if (calcCRC != recvCRC) return MODBUS_CRC_ERROR;
-    if (resp[0] != slaveAddr || resp[1] != functionCode || resp[2] != 2 * quantity) {
-        return MODBUS_BAD_RESPONSE;
-    }
-
-    for (uint16_t i = 0; i < quantity; i++) {
-        registers[i] = ((uint16_t)resp[3 + 2 * i] << 8) | resp[4 + 2 * i];
-    }
-    return MODBUS_OK;
-}
-
-/* --- Read XY-MD02 via RTU, returns status code --- */
-int readXYMD02(int16_t *temp, uint16_t *humi) {
-    uint16_t registers[XYMD02_QTY] = {0};
-    int status = readModbusRegisters(XYMD02_ADDR, XYMD02_FC,
-                                     XYMD02_REG, XYMD02_QTY,
-                                     registers, XYMD02_QTY);
-    if (status == MODBUS_OK) {
-        *temp = (int16_t)registers[0];
-        *humi = registers[1];
-    }
-    return status;
-}
-
-float floatFromWords(uint16_t highWord, uint16_t lowWord) {
-    uint32_t raw = ((uint32_t)highWord << 16) | lowWord;
-    float value = 0.0f;
-    memcpy(&value, &raw, sizeof(value));
-    return value;
-}
-
-uint32_t rawFromFloat(float value) {
-    uint32_t raw = 0;
-    memcpy(&raw, &value, sizeof(raw));
-    return raw;
-}
-
-int readSDM120Float(uint16_t regAddr, float *value) {
-    uint16_t registers[SDM120_FLOAT_QTY] = {0};
-    int status = readModbusRegisters(SDM120_ADDR, SDM120_FC,
-                                     regAddr, SDM120_FLOAT_QTY,
-                                     registers, SDM120_FLOAT_QTY);
-    if (status == MODBUS_OK) {
-        *value = floatFromWords(registers[0], registers[1]);
-    } else {
-        *value = 0.0f;
-    }
-    return status;
-}
-
-/* --- Read power meter via RTU, returns status code --- */
-int readPowerMeter(PowerReading *reading) {
-    float *values[] = {
-        &reading->voltage,
-        &reading->current,
-        &reading->activePower,
-        &reading->apparentPower,
-        &reading->reactivePower,
-        &reading->powerFactor,
-        &reading->frequency,
-        &reading->totalActiveEnergy,
-    };
-
-    for (size_t i = 0; i < SDM120_PARAM_COUNT; i++) {
-        int status = readSDM120Float(SDM120_PARAMS[i].regAddr, values[i]);
-        if (status != MODBUS_OK) {
-            return status;
-        }
-        delay(SDM120_INTER_READ_DELAY_MS);
-    }
-
-    return MODBUS_OK;
-}
-
-void printPowerMeterReading(const PowerReading *reading) {
-    const float values[] = {
-        reading->voltage,
-        reading->current,
-        reading->activePower,
-        reading->apparentPower,
-        reading->reactivePower,
-        reading->powerFactor,
-        reading->frequency,
-        reading->totalActiveEnergy,
-    };
-
-    for (size_t i = 0; i < SDM120_PARAM_COUNT; i++) {
-        Serial.printf("0x%04X: %20s, %7.3f [%s]\n",
-                      SDM120_PARAMS[i].regAddr,
-                      SDM120_PARAMS[i].name,
-                      values[i],
-                      SDM120_PARAMS[i].unit);
-    }
-}
-
-void writeFloatHregs(uint16_t highReg, uint16_t lowReg, float value) {
-    uint32_t raw = rawFromFloat(value);
-    mb.Hreg(highReg, (uint16_t)(raw >> 16));
-    mb.Hreg(lowReg, (uint16_t)(raw & 0xFFFF));
-}
-
-void writePowerHregs(int status, const PowerReading *reading) {
-    mb.Hreg(HREG_POWER_STATUS, (uint16_t)status);
-    if (status != MODBUS_OK) return;
-
-    writeFloatHregs(HREG_POWER_VOLTAGE_H, HREG_POWER_VOLTAGE_L, reading->voltage);
-    writeFloatHregs(HREG_POWER_CURRENT_H, HREG_POWER_CURRENT_L, reading->current);
-    writeFloatHregs(HREG_POWER_WATTS_H, HREG_POWER_WATTS_L, reading->activePower);
-    writeFloatHregs(HREG_POWER_VA_H, HREG_POWER_VA_L, reading->apparentPower);
-    writeFloatHregs(HREG_POWER_VAR_H, HREG_POWER_VAR_L, reading->reactivePower);
-    writeFloatHregs(HREG_POWER_PF_H, HREG_POWER_PF_L, reading->powerFactor);
-    writeFloatHregs(HREG_POWER_FREQ_H, HREG_POWER_FREQ_L, reading->frequency);
-    writeFloatHregs(HREG_POWER_ENERGY_H, HREG_POWER_ENERGY_L, reading->totalActiveEnergy);
-}
-
-void appendPayload(char *payload, size_t payloadSize, size_t *len, const char *format, ...) {
-    if (*len >= payloadSize) return;
-
-    va_list args;
-    va_start(args, format);
-    int written = vsnprintf(payload + *len, payloadSize - *len, format, args);
-    va_end(args);
-
-    if (written < 0) return;
-
-    size_t remaining = payloadSize - *len;
-    if ((size_t)written >= remaining) {
-        *len = payloadSize - 1;
-    } else {
-        *len += (size_t)written;
-    }
-}
-
-bool publishTelemetry(const TelemetrySnapshot *snapshot) {
-    if (!mqttClient.connected()) {
-        Serial.println("[MQTT] Publish skipped: not connected");
-        return false;
-    }
-
-    char payload[MQTT_BUF_SIZE];
-    size_t len = 0;
-    appendPayload(payload, sizeof(payload), &len,
-                  "{\"status\":%d,\"poll_count\":%u",
-                  snapshot->weather.status, snapshot->pollCount);
-
-    if (snapshot->weather.status == MODBUS_OK) {
-        appendPayload(payload, sizeof(payload), &len,
-                      ",\"temperature_raw\":%d,\"humidity_raw\":%u,"
-                      "\"temperature\":%.1f,\"humidity\":%.1f",
-                      snapshot->weather.temperatureRaw,
-                      snapshot->weather.humidityRaw,
-                      snapshot->weather.temperatureRaw / 10.0,
-                      snapshot->weather.humidityRaw / 10.0);
-    }
-
-    appendPayload(payload, sizeof(payload), &len,
-                  ",\"power_status\":%d", snapshot->powerStatus);
-
-    if (snapshot->powerStatus == MODBUS_OK) {
-        appendPayload(payload, sizeof(payload), &len,
-                      ",\"power_voltage\":%.1f,\"power_current\":%.3f,"
-                      "\"power_watts\":%.1f,\"power_apparent_va\":%.1f,"
-                      "\"power_reactive_var\":%.1f,\"power_factor\":%.3f,"
-                      "\"power_frequency\":%.1f,\"power_energy_kwh\":%.3f",
-                      snapshot->power.voltage,
-                      snapshot->power.current,
-                      snapshot->power.activePower,
-                      snapshot->power.apparentPower,
-                      snapshot->power.reactivePower,
-                      snapshot->power.powerFactor,
-                      snapshot->power.frequency,
-                      snapshot->power.totalActiveEnergy);
-    }
-
-    appendPayload(payload, sizeof(payload), &len, "}");
-    bool published = mqttClient.publish(TOPIC_DATA, payload, false, MQTT_QOS);
-    Serial.printf("[MQTT] %s %s\n", published ? "Published" : "Publish failed", payload);
-    return published;
-}
+uint16_t      pollCount     = 0;
+unsigned long lastPoll      = 0;
+unsigned long lastWifiCheck = 0;
+unsigned long lastMqttTry   = 0;
 
 /* TCP client connect callback. Hook for future ACL/IP filtering. */
 bool cbConn(IPAddress ip) {
@@ -458,16 +102,72 @@ void tryMqttReconnect() {
     if (mqttClient.connect(CLIENT_ID)) {
         Serial.println(" connected");
     } else {
-        /* arduino-mqtt exposes lastError() (-ve) and returnCode() (CONNACK) */
         Serial.printf(" failed lastError=%d returnCode=%d\n",
                       mqttClient.lastError(), mqttClient.returnCode());
     }
 }
 
-/* --- Setup --- */
+void handleNetworkWatchdogs() {
+    if (millis() - lastWifiCheck >= WIFI_RECONNECT_INTERVAL) {
+        lastWifiCheck = millis();
+        if (WiFi.status() != WL_CONNECTED) {
+            Serial.println("[WiFi] Disconnected, reconnecting...");
+            WiFi.disconnect();
+            connectWiFi();
+        }
+    }
+
+    if (!mqttClient.connected() &&
+        millis() - lastMqttTry >= MQTT_RECONNECT_INTERVAL) {
+        lastMqttTry = millis();
+        tryMqttReconnect();
+    }
+}
+
+void handleWeatherReading(const WeatherReading *reading) {
+    if (reading->status == MODBUS_OK) {
+        pollCount++;
+        writeWeatherHregs(mb, reading, pollCount);
+
+        Serial.printf("XY-MD02: raw_temp=%d raw_humi=%u %.1fC %.1f%%RH [OK #%u]\n",
+                      reading->temperatureRaw,
+                      reading->humidityRaw,
+                      weatherTemperatureC(reading),
+                      weatherHumidityPercent(reading),
+                      pollCount);
+    } else {
+        writeWeatherHregs(mb, reading, pollCount);
+        Serial.printf("XY-MD02: ERROR (status=%d)\n", reading->status);
+    }
+}
+
+void handlePowerReading(int status, const PowerReading *reading) {
+    writePowerHregs(mb, status, reading);
+    if (status == MODBUS_OK) {
+        Serial.println("SDM120: [OK]");
+        printPowerMeterReading(reading);
+    } else {
+        Serial.printf("SDM120: ERROR (status=%d)\n", status);
+    }
+}
+
+void handleSensorPolling() {
+    if (millis() - lastPoll < POLL_INTERVAL_MS) return;
+    lastPoll = millis();
+
+    TelemetrySnapshot snapshot = {};
+    snapshot.weather = readWeather(rtu);
+    handleWeatherReading(&snapshot.weather);
+    delay(SENSOR_SEQUENCE_DELAY_MS);
+    snapshot.powerStatus = readPower(rtu, &snapshot.power);
+    handlePowerReading(snapshot.powerStatus, &snapshot.power);
+    snapshot.pollCount = pollCount;
+
+    publishTelemetry(mqttClient, &snapshot);
+}
+
 void setup() {
     Serial.begin(115200);
-    //while (!Serial) delay(10);
 
     Serial.println();
     Serial.println("===========================================");
@@ -506,88 +206,6 @@ void setup() {
     Serial.println("Hregs: HR0=Temp, HR1=Humi, HR2=Status, HR3=PollCnt, HR4..HR20=SDM120");
     Serial.printf("MQTT broker: %s (QoS %d)\n", MQTT_BROKER, MQTT_QOS);
     Serial.printf("Topic: %s  (JSON payload)\n\n", TOPIC_DATA);
-}
-
-/* --- Main Loop --- */
-uint16_t      pollCount     = 0;
-unsigned long lastPoll      = 0;
-unsigned long lastWifiCheck = 0;
-unsigned long lastMqttTry   = 0;
-
-void handleNetworkWatchdogs() {
-    /* WiFi watchdog */
-    if (millis() - lastWifiCheck >= WIFI_RECONNECT_INTERVAL) {
-        lastWifiCheck = millis();
-        if (WiFi.status() != WL_CONNECTED) {
-            Serial.println("[WiFi] Disconnected, reconnecting...");
-            WiFi.disconnect();
-            connectWiFi();
-        }
-    }
-
-    /* MQTT watchdog (non-blocking) */
-    if (!mqttClient.connected() &&
-        millis() - lastMqttTry >= MQTT_RECONNECT_INTERVAL) {
-        lastMqttTry = millis();
-        tryMqttReconnect();
-    }
-}
-
-WeatherReading readWeather() {
-    WeatherReading reading = {MODBUS_TIMEOUT, 0, 0};
-    reading.status = readXYMD02(&reading.temperatureRaw, &reading.humidityRaw);
-
-    if (reading.status == MODBUS_OK) {
-        pollCount++;
-        float tempC = reading.temperatureRaw / 10.0;
-        float humiP = reading.humidityRaw / 10.0;
-
-        mb.Hreg(HREG_TEMP,     (uint16_t)reading.temperatureRaw);
-        mb.Hreg(HREG_HUMI,     reading.humidityRaw);
-        mb.Hreg(HREG_STATUS,   0);
-        mb.Hreg(HREG_POLL_CNT, pollCount);
-
-        Serial.printf("XY-MD02: raw_temp=%d raw_humi=%u %.1fC %.1f%%RH [OK #%u]\n",
-                      reading.temperatureRaw,
-                      reading.humidityRaw,
-                      tempC,
-                      humiP,
-                      pollCount);
-    } else {
-        mb.Hreg(HREG_STATUS, (uint16_t)reading.status);
-        mb.Hreg(HREG_POLL_CNT, pollCount);
-        Serial.printf("XY-MD02: ERROR (status=%d)\n", reading.status);
-    }
-
-    return reading;
-}
-
-int readPower(PowerReading *reading) {
-    *reading = {};
-    int status = readPowerMeter(reading);
-
-    writePowerHregs(status, reading);
-    if (status == MODBUS_OK) {
-        Serial.println("SDM120: [OK]");
-        printPowerMeterReading(reading);
-    } else {
-        Serial.printf("SDM120: ERROR (status=%d)\n", status);
-    }
-
-    return status;
-}
-
-void handleSensorPolling() {
-    if (millis() - lastPoll < POLL_INTERVAL_MS) return;
-    lastPoll = millis();
-
-    TelemetrySnapshot snapshot = {};
-    snapshot.weather = readWeather();
-    delay(SENSOR_SEQUENCE_DELAY_MS);
-    snapshot.powerStatus = readPower(&snapshot.power);
-    snapshot.pollCount = pollCount;
-
-    publishTelemetry(&snapshot);
 }
 
 void loop() {
