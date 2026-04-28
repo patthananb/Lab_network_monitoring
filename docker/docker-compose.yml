@@ -1,7 +1,7 @@
 services:
   # MQTT Broker
   mosquitto:
-    image: eclipse-mosquitto:latest
+    image: ${MOSQUITTO_IMAGE:-eclipse-mosquitto:2.0}
     container_name: mosquitto
     restart: always
     ports:
@@ -11,27 +11,35 @@ services:
       - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # InfluxDB (v2.x)
   influxdb:
-    image: influxdb:2.7
+    image: ${INFLUXDB_IMAGE:-influxdb:2.7}
     container_name: influxdb
     restart: always
     ports:
       - "8086:8086"
     environment:
-      - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      - DOCKER_INFLUXDB_INIT_PASSWORD=adminpassword
-      - DOCKER_INFLUXDB_INIT_ORG=weatherstation
-      - DOCKER_INFLUXDB_INIT_BUCKET=sensors
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=mysecrettoken
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_USERNAME:-admin}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_PASSWORD:?Set INFLUXDB_PASSWORD in .env}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_ORG:-weatherstation}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUXDB_BUCKET:-sensors}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_ADMIN_TOKEN:?Set INFLUXDB_ADMIN_TOKEN in .env}
     volumes:
       - influxdb_data:/var/lib/influxdb2
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # Telegraf
   telegraf:
-    image: telegraf:1.28
+    image: ${TELEGRAF_IMAGE:-telegraf:1.28}
     container_name: telegraf
     restart: always
     depends_on:
@@ -43,36 +51,54 @@ services:
       - /sys:/host/sys:ro
       - /etc:/host/etc:ro
     environment:
-      - HOST_PROC=/host/proc
-      - HOST_SYS=/host/sys
-      - HOST_ETC=/host/etc
+      HOST_PROC: /host/proc
+      HOST_SYS: /host/sys
+      HOST_ETC: /host/etc
+      INFLUXDB_URL: http://influxdb:8086
+      INFLUXDB_TOKEN: ${INFLUXDB_ADMIN_TOKEN:?Set INFLUXDB_ADMIN_TOKEN in .env}
+      INFLUXDB_ORG: ${INFLUXDB_ORG:-weatherstation}
+      INFLUXDB_BUCKET: ${INFLUXDB_BUCKET:-sensors}
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # Grafana
   grafana:
-    image: grafana/grafana:latest
+    image: ${GRAFANA_IMAGE:-grafana/grafana:13.0.1}
     container_name: grafana
     restart: always
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_SERVER_ROOT_URL=https://grafana.yourdomain.com
-      - GF_SERVER_DOMAIN=grafana.yourdomain.com
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
-      - GF_SECURITY_ALLOW_EMBEDDING=true
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
+      GF_SERVER_DOMAIN: ${GRAFANA_DOMAIN:-localhost}
+      GF_AUTH_ANONYMOUS_ENABLED: ${GRAFANA_ANONYMOUS_ENABLED:-true}
+      GF_AUTH_ANONYMOUS_ORG_ROLE: ${GRAFANA_ANONYMOUS_ORG_ROLE:-Viewer}
+      GF_SECURITY_ALLOW_EMBEDDING: ${GRAFANA_ALLOW_EMBEDDING:-true}
     volumes:
       - grafana_data:/var/lib/grafana
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # Cloudflare Tunnel
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    image: ${CLOUDFLARED_IMAGE:-cloudflare/cloudflared:2026.3.0}
     container_name: cloudflared
     restart: always
+    profiles:
+      - tunnel
     command: tunnel --no-autoupdate run
     environment:
-      - TUNNEL_TOKEN=PASTE_YOUR_TOKEN_HERE
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   mosquitto_data:

@@ -120,7 +120,7 @@
             "type": "influxdb",
             "uid": "cfjcdjfdsip6oa"
           },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"weather\")\n  |> filter(fn: (r) => r[\"host\"] == \"7847af5db558\")\n  |> filter(fn: (r) => r[\"_field\"] == \"temperature\")\n  |> yield(name: \"temperature\")\n",
+          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"weather\")\n  |> filter(fn: (r) => r[\"_field\"] == \"temperature\")\n  |> group(columns: [\"_measurement\", \"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"temperature\")\n",
           "refId": "A"
         }
       ],
@@ -223,7 +223,7 @@
             "type": "influxdb",
             "uid": "cfjcdjfdsip6oa"
           },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"weather\")\n  |> filter(fn: (r) => r[\"host\"] == \"7847af5db558\")\n  |> filter(fn: (r) => r[\"_field\"] == \"humidity\")\n  |> yield(name: \"humidity\")\n",
+          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"weather\")\n  |> filter(fn: (r) => r[\"_field\"] == \"humidity\")\n  |> group(columns: [\"_measurement\", \"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"humidity\")\n",
           "refId": "A"
         }
       ],
@@ -299,7 +299,7 @@
             "type": "influxdb",
             "uid": "cfjcdjfdsip6oa"
           },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"weather\")\n  |> filter(fn: (r) => r[\"host\"] == \"7847af5db558\")\n  |> filter(fn: (r) => r[\"_field\"] == \"status\")\n  |> yield(name: \"status\")\n",
+          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"weather\")\n  |> filter(fn: (r) => r[\"_field\"] == \"status\")\n  |> group(columns: [\"_measurement\", \"_field\"])\n  |> last()\n  |> yield(name: \"status\")\n",
           "refId": "A"
         }
       ],
