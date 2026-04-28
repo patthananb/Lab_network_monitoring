@@ -16,7 +16,8 @@
  *   - Modbus TCP Holding Registers: weather + SDM120 power meter values
  *
  * MQTT JSON payload:
- *   {"status":0,"poll_count":142,"temperature":24.9,"humidity":48.6,
+ *   {"status":0,"poll_count":142,"temperature_raw":249,"humidity_raw":486,
+ *    "temperature":24.9,"humidity":48.6,
  *    "power_status":0,"power_voltage":229.4,"power_current":0.418,
  *    "power_watts":74.6,"power_apparent_va":77.5,"power_reactive_var":12.0,
  *    "power_factor":0.96,"power_frequency":50.0,"power_energy_kwh":12.348}
@@ -121,6 +122,7 @@
 
 /* --- Timing --- */
 #define POLL_INTERVAL_MS         2000
+#define SENSOR_SEQUENCE_DELAY_MS 10
 #define WIFI_RECONNECT_INTERVAL  5000
 #define MQTT_RECONNECT_INTERVAL  5000
 
@@ -139,6 +141,19 @@ struct PowerReading {
     float powerFactor;
     float frequency;
     float totalActiveEnergy;
+};
+
+struct WeatherReading {
+    int status;
+    int16_t temperatureRaw;
+    uint16_t humidityRaw;
+};
+
+struct TelemetrySnapshot {
+    WeatherReading weather;
+    PowerReading power;
+    int powerStatus;
+    uint16_t pollCount;
 };
 
 struct SDM120Param {
@@ -359,44 +374,51 @@ void appendPayload(char *payload, size_t payloadSize, size_t *len, const char *f
     }
 }
 
-void publishTelemetry(int weatherStatus, int16_t tempRaw, uint16_t humiRaw,
-                      uint16_t currentPollCount, int powerStatus,
-                      const PowerReading *powerReading) {
-    if (!mqttClient.connected()) return;
+bool publishTelemetry(const TelemetrySnapshot *snapshot) {
+    if (!mqttClient.connected()) {
+        Serial.println("[MQTT] Publish skipped: not connected");
+        return false;
+    }
 
     char payload[MQTT_BUF_SIZE];
     size_t len = 0;
     appendPayload(payload, sizeof(payload), &len,
                   "{\"status\":%d,\"poll_count\":%u",
-                  weatherStatus, currentPollCount);
+                  snapshot->weather.status, snapshot->pollCount);
 
-    if (weatherStatus == MODBUS_OK) {
+    if (snapshot->weather.status == MODBUS_OK) {
         appendPayload(payload, sizeof(payload), &len,
-                      ",\"temperature\":%.1f,\"humidity\":%.1f",
-                      tempRaw / 10.0, humiRaw / 10.0);
+                      ",\"temperature_raw\":%d,\"humidity_raw\":%u,"
+                      "\"temperature\":%.1f,\"humidity\":%.1f",
+                      snapshot->weather.temperatureRaw,
+                      snapshot->weather.humidityRaw,
+                      snapshot->weather.temperatureRaw / 10.0,
+                      snapshot->weather.humidityRaw / 10.0);
     }
 
     appendPayload(payload, sizeof(payload), &len,
-                  ",\"power_status\":%d", powerStatus);
+                  ",\"power_status\":%d", snapshot->powerStatus);
 
-    if (powerStatus == MODBUS_OK) {
+    if (snapshot->powerStatus == MODBUS_OK) {
         appendPayload(payload, sizeof(payload), &len,
                       ",\"power_voltage\":%.1f,\"power_current\":%.3f,"
                       "\"power_watts\":%.1f,\"power_apparent_va\":%.1f,"
                       "\"power_reactive_var\":%.1f,\"power_factor\":%.3f,"
                       "\"power_frequency\":%.1f,\"power_energy_kwh\":%.3f",
-                      powerReading->voltage,
-                      powerReading->current,
-                      powerReading->activePower,
-                      powerReading->apparentPower,
-                      powerReading->reactivePower,
-                      powerReading->powerFactor,
-                      powerReading->frequency,
-                      powerReading->totalActiveEnergy);
+                      snapshot->power.voltage,
+                      snapshot->power.current,
+                      snapshot->power.activePower,
+                      snapshot->power.apparentPower,
+                      snapshot->power.reactivePower,
+                      snapshot->power.powerFactor,
+                      snapshot->power.frequency,
+                      snapshot->power.totalActiveEnergy);
     }
 
     appendPayload(payload, sizeof(payload), &len, "}");
-    mqttClient.publish(TOPIC_DATA, payload, false, MQTT_QOS);
+    bool published = mqttClient.publish(TOPIC_DATA, payload, false, MQTT_QOS);
+    Serial.printf("[MQTT] %s %s\n", published ? "Published" : "Publish failed", payload);
+    return published;
 }
 
 /* TCP client connect callback. Hook for future ACL/IP filtering. */
@@ -468,6 +490,7 @@ void setup() {
     connectWiFi();
 
     mqttClient.begin(MQTT_BROKER, 1883, espClient);
+    tryMqttReconnect();
 
     mb.server();
     mb.onConnect(cbConn);
@@ -510,48 +533,61 @@ void handleNetworkWatchdogs() {
     }
 }
 
-void handleSensorPolling() {
-    /* Poll RTU devices at interval */
-    if (millis() - lastPoll >= POLL_INTERVAL_MS) {
-        lastPoll = millis();
+WeatherReading readWeather() {
+    WeatherReading reading = {MODBUS_TIMEOUT, 0, 0};
+    reading.status = readXYMD02(&reading.temperatureRaw, &reading.humidityRaw);
 
-        int16_t  tempRaw = 0;
-        uint16_t humiRaw = 0;
-        PowerReading powerReading = {0};
+    if (reading.status == MODBUS_OK) {
+        pollCount++;
+        float tempC = reading.temperatureRaw / 10.0;
+        float humiP = reading.humidityRaw / 10.0;
 
-        int weatherStatus = readXYMD02(&tempRaw, &humiRaw);
-        int powerStatus = readPowerMeter(&powerReading);
+        mb.Hreg(HREG_TEMP,     (uint16_t)reading.temperatureRaw);
+        mb.Hreg(HREG_HUMI,     reading.humidityRaw);
+        mb.Hreg(HREG_STATUS,   0);
+        mb.Hreg(HREG_POLL_CNT, pollCount);
 
-        if (weatherStatus == MODBUS_OK) {
-            pollCount++;
-            float tempC = tempRaw / 10.0;
-            float humiP = humiRaw / 10.0;
-
-            /* Modbus TCP holding registers */
-            mb.Hreg(HREG_TEMP,     (uint16_t)tempRaw);
-            mb.Hreg(HREG_HUMI,     humiRaw);
-            mb.Hreg(HREG_STATUS,   0);
-            mb.Hreg(HREG_POLL_CNT, pollCount);
-
-            Serial.printf("XY-MD02: %.1fC  %.1f%%RH  [OK #%u]\n",
-                          tempC, humiP, pollCount);
-        } else {
-            mb.Hreg(HREG_STATUS, (uint16_t)weatherStatus);
-            mb.Hreg(HREG_POLL_CNT, pollCount);
-            Serial.printf("XY-MD02: ERROR (status=%d)\n", weatherStatus);
-        }
-
-        writePowerHregs(powerStatus, &powerReading);
-        if (powerStatus == MODBUS_OK) {
-            Serial.println("SDM120: [OK]");
-            printPowerMeterReading(&powerReading);
-        } else {
-            Serial.printf("SDM120: ERROR (status=%d)\n", powerStatus);
-        }
-
-        publishTelemetry(weatherStatus, tempRaw, humiRaw, pollCount,
-                         powerStatus, &powerReading);
+        Serial.printf("XY-MD02: raw_temp=%d raw_humi=%u %.1fC %.1f%%RH [OK #%u]\n",
+                      reading.temperatureRaw,
+                      reading.humidityRaw,
+                      tempC,
+                      humiP,
+                      pollCount);
+    } else {
+        mb.Hreg(HREG_STATUS, (uint16_t)reading.status);
+        mb.Hreg(HREG_POLL_CNT, pollCount);
+        Serial.printf("XY-MD02: ERROR (status=%d)\n", reading.status);
     }
+
+    return reading;
+}
+
+int readPower(PowerReading *reading) {
+    *reading = {};
+    int status = readPowerMeter(reading);
+
+    writePowerHregs(status, reading);
+    if (status == MODBUS_OK) {
+        Serial.println("SDM120: [OK]");
+        printPowerMeterReading(reading);
+    } else {
+        Serial.printf("SDM120: ERROR (status=%d)\n", status);
+    }
+
+    return status;
+}
+
+void handleSensorPolling() {
+    if (millis() - lastPoll < POLL_INTERVAL_MS) return;
+    lastPoll = millis();
+
+    TelemetrySnapshot snapshot = {};
+    snapshot.weather = readWeather();
+    delay(SENSOR_SEQUENCE_DELAY_MS);
+    snapshot.powerStatus = readPower(&snapshot.power);
+    snapshot.pollCount = pollCount;
+
+    publishTelemetry(&snapshot);
 }
 
 void loop() {
