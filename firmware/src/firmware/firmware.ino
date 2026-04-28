@@ -63,6 +63,7 @@
 #define RS485_TX        17
 #define RS485_RX        18
 #define RS485_BAUD      9600
+#define RS485_RX_TIMEOUT_SYMBOLS 1
 
 /* Uncomment if your board needs manual DE/RE direction control: */
 // #define DIR_PIN 4
@@ -77,6 +78,7 @@
 #define SDM120_ADDR                  2
 #define SDM120_FC                    0x04
 #define SDM120_FLOAT_QTY             0x0002
+#define MODBUS_POST_REQUEST_DELAY_MS 1
 #define SDM120_INTER_READ_DELAY_MS   10
 #define SDM120_REG_VOLTAGE           0x0000
 #define SDM120_REG_CURRENT           0x0006
@@ -139,6 +141,24 @@ struct PowerReading {
     float totalActiveEnergy;
 };
 
+struct SDM120Param {
+    uint16_t regAddr;
+    const char *name;
+    const char *unit;
+};
+
+const SDM120Param SDM120_PARAMS[] = {
+    {SDM120_REG_VOLTAGE,        "Voltage",             "V"},
+    {SDM120_REG_CURRENT,        "Current",             "A"},
+    {SDM120_REG_ACTIVE_POWER,   "Active Power",        "W"},
+    {SDM120_REG_APPARENT_POWER, "Apparent Power",      "VA"},
+    {SDM120_REG_REACTIVE_POWER, "Reactive Power",      "VAr"},
+    {SDM120_REG_POWER_FACTOR,   "Power Factor",        "-"},
+    {SDM120_REG_FREQUENCY,      "Frequency",           "Hz"},
+    {SDM120_REG_TOTAL_ENERGY,   "Total Active Energy", "kWh"},
+};
+const size_t SDM120_PARAM_COUNT = sizeof(SDM120_PARAMS) / sizeof(SDM120_PARAMS[0]);
+
 /* --- RTU CRC-16 --- */
 uint16_t modbusCRC16(const uint8_t *data, size_t len) {
     uint16_t crc = 0xFFFF;
@@ -190,7 +210,7 @@ int readModbusRegisters(uint8_t slaveAddr, uint8_t functionCode,
     #ifdef DIR_PIN
     digitalWrite(DIR_PIN, LOW);
     #endif
-    delay(1);
+    delay(MODBUS_POST_REQUEST_DELAY_MS);
 
     uint8_t resp[64] = {0};
     size_t rx = RS485.readBytes(resp, responseLen);
@@ -258,24 +278,19 @@ int readSDM120Float(uint16_t regAddr, float *value) {
 
 /* --- Read power meter via RTU, returns status code --- */
 int readPowerMeter(PowerReading *reading) {
-    struct PowerParam {
-        uint16_t regAddr;
-        float *value;
+    float *values[] = {
+        &reading->voltage,
+        &reading->current,
+        &reading->activePower,
+        &reading->apparentPower,
+        &reading->reactivePower,
+        &reading->powerFactor,
+        &reading->frequency,
+        &reading->totalActiveEnergy,
     };
 
-    PowerParam params[] = {
-        {SDM120_REG_VOLTAGE,        &reading->voltage},
-        {SDM120_REG_CURRENT,        &reading->current},
-        {SDM120_REG_ACTIVE_POWER,   &reading->activePower},
-        {SDM120_REG_APPARENT_POWER, &reading->apparentPower},
-        {SDM120_REG_REACTIVE_POWER, &reading->reactivePower},
-        {SDM120_REG_POWER_FACTOR,   &reading->powerFactor},
-        {SDM120_REG_FREQUENCY,      &reading->frequency},
-        {SDM120_REG_TOTAL_ENERGY,   &reading->totalActiveEnergy},
-    };
-
-    for (size_t i = 0; i < sizeof(params) / sizeof(params[0]); i++) {
-        int status = readSDM120Float(params[i].regAddr, params[i].value);
+    for (size_t i = 0; i < SDM120_PARAM_COUNT; i++) {
+        int status = readSDM120Float(SDM120_PARAMS[i].regAddr, values[i]);
         if (status != MODBUS_OK) {
             return status;
         }
@@ -283,6 +298,27 @@ int readPowerMeter(PowerReading *reading) {
     }
 
     return MODBUS_OK;
+}
+
+void printPowerMeterReading(const PowerReading *reading) {
+    const float values[] = {
+        reading->voltage,
+        reading->current,
+        reading->activePower,
+        reading->apparentPower,
+        reading->reactivePower,
+        reading->powerFactor,
+        reading->frequency,
+        reading->totalActiveEnergy,
+    };
+
+    for (size_t i = 0; i < SDM120_PARAM_COUNT; i++) {
+        Serial.printf("0x%04X: %20s, %7.3f [%s]\n",
+                      SDM120_PARAMS[i].regAddr,
+                      SDM120_PARAMS[i].name,
+                      values[i],
+                      SDM120_PARAMS[i].unit);
+    }
 }
 
 void writeFloatHregs(uint16_t highReg, uint16_t lowReg, float value) {
@@ -419,6 +455,8 @@ void setup() {
 
     RS485.begin(RS485_BAUD, SERIAL_8N1, RS485_RX, RS485_TX);
     RS485.setTimeout(30);
+    RS485.setRxTimeout(RS485_RX_TIMEOUT_SYMBOLS);
+    RS485.flush();
     #ifdef DIR_PIN
     pinMode(DIR_PIN, OUTPUT);
     digitalWrite(DIR_PIN, LOW);
@@ -505,15 +543,8 @@ void handleSensorPolling() {
 
         writePowerHregs(powerStatus, &powerReading);
         if (powerStatus == MODBUS_OK) {
-            Serial.printf("SDM120: %.1fV  %.3fA  %.1fW  %.1fVA  %.1fVAr  pf=%.3f  %.1fHz  %.3fkWh [OK]\n",
-                          powerReading.voltage,
-                          powerReading.current,
-                          powerReading.activePower,
-                          powerReading.apparentPower,
-                          powerReading.reactivePower,
-                          powerReading.powerFactor,
-                          powerReading.frequency,
-                          powerReading.totalActiveEnergy);
+            Serial.println("SDM120: [OK]");
+            printPowerMeterReading(&powerReading);
         } else {
             Serial.printf("SDM120: ERROR (status=%d)\n", powerStatus);
         }
