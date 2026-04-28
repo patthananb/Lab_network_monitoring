@@ -89,7 +89,7 @@
             "type": "influxdb",
             "uid": "cfjcdjfdsip6oa"
           },
-          "query": "from(bucket: \"sensors\")\n   |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n   |> filter(fn: (r) => r[\"_measurement\"] == \"pi_cpu_temp\")\n   |> map(fn: (r) => ({ r with _value: float(v: r._value) / 1000.0 }))\n   |> yield(name: \"pi_cpu_temp\")",
+          "query": "from(bucket: \"sensors\")\n   |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n   |> filter(fn: (r) => r[\"_measurement\"] == \"pi_cpu_temp\")\n   |> group(columns: [\"_measurement\", \"_field\"])\n   |> map(fn: (r) => ({ r with _value: float(v: r._value) / 1000.0 }))\n   |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n   |> yield(name: \"pi_cpu_temp\")",
           "refId": "A"
         }
       ],
@@ -190,7 +190,7 @@
             "type": "influxdb",
             "uid": "cfjcdjfdsip6oa"
           },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"pi_cpu_temp\")\n  |> map(fn: (r) => ({ r with _value: float(v: r._value) / 1000.0 }))\n  |> yield(name: \"pi_cpu_temp\")\n",
+          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"pi_cpu_temp\")\n  |> group(columns: [\"_measurement\", \"_field\"])\n  |> map(fn: (r) => ({ r with _value: float(v: r._value) / 1000.0 }))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"pi_cpu_temp\")\n",
           "refId": "A"
         }
       ],
@@ -258,7 +258,7 @@
             "type": "influxdb",
             "uid": "cfjcdjfdsip6oa"
           },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"cpu\")\n  |> filter(fn: (r) => r[\"cpu\"] == \"cpu-total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"usage_idle\")\n  |> map(fn: (r) => ({r with _value: 100.0 - r._value}))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"cpu_usage\")",
+          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"cpu\")\n  |> filter(fn: (r) => r[\"cpu\"] == \"cpu-total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"usage_idle\")\n  |> group(columns: [\"_measurement\", \"_field\"])\n  |> map(fn: (r) => ({r with _value: 100.0 - r._value}))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"cpu_usage\")",
           "refId": "A"
         }
       ],
@@ -355,7 +355,7 @@
             "type": "influxdb",
             "uid": "cfjcdjfdsip6oa"
           },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"cpu\")\n  |> filter(fn: (r) => r[\"cpu\"] == \"cpu-total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"usage_idle\")\n  |> map(fn: (r) => ({r with _value: 100.0 - r._value}))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"cpu_usage\")",
+          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"cpu\")\n  |> filter(fn: (r) => r[\"cpu\"] == \"cpu-total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"usage_idle\")\n  |> group(columns: [\"_measurement\", \"_field\"])\n  |> map(fn: (r) => ({r with _value: 100.0 - r._value}))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"cpu_usage\")",
           "refId": "A"
         }
       ],
@@ -423,7 +423,7 @@
             "type": "influxdb",
             "uid": "cfjcdjfdsip6oa"
           },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mem\")\n  |> filter(fn: (r) => r[\"_field\"] == \"used_percent\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mem_usage\")",
+          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mem\")\n  |> filter(fn: (r) => r[\"_field\"] == \"used_percent\")\n  |> group(columns: [\"_measurement\", \"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mem_usage\")",
           "refId": "A"
         }
       ],
@@ -520,7 +520,7 @@
             "type": "influxdb",
             "uid": "cfjcdjfdsip6oa"
           },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mem\")\n  |> filter(fn: (r) => r[\"_field\"] == \"used_percent\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mem_usage\")",
+          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mem\")\n  |> filter(fn: (r) => r[\"_field\"] == \"used_percent\")\n  |> group(columns: [\"_measurement\", \"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mem_usage\")",
           "refId": "A"
         }
       ],
