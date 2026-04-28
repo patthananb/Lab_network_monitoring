@@ -328,7 +328,7 @@
         },
         "tooltip": {
           "hideZeros": false,
-          "mode": "multi",
+          "mode": "single",
           "sort": "none"
         }
       },
@@ -417,11 +417,11 @@
             "type": "influxdb",
             "uid": "cfjcdjfdsip6oa"
           },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"weather\")\n  |> filter(fn: (r) => r[\"_field\"] == \"power_factor\" or r[\"_field\"] == \"power_frequency\")\n  |> group(columns: [\"_measurement\", \"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"quality\")",
+          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"weather\")\n  |> filter(fn: (r) => r[\"_field\"] == \"power_factor\")\n  |> group(columns: [\"_measurement\", \"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"power_factor\")",
           "refId": "A"
         }
       ],
-      "title": "Power Factor and Frequency",
+      "title": "Power Factor",
       "type": "timeseries"
     },
     {
@@ -465,8 +465,8 @@
               "mode": "off"
             }
           },
-          "decimals": 3,
-          "unit": "kwatth"
+      "decimals": 1,
+      "unit": "hertz"
         }
       },
       "gridPos": {
@@ -497,11 +497,11 @@
             "type": "influxdb",
             "uid": "cfjcdjfdsip6oa"
           },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"weather\")\n  |> filter(fn: (r) => r[\"_field\"] == \"power_energy_kwh\")\n  |> group(columns: [\"_measurement\", \"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> yield(name: \"energy\")",
+          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"weather\")\n  |> filter(fn: (r) => r[\"_field\"] == \"power_frequency\")\n  |> group(columns: [\"_measurement\", \"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"power_frequency\")",
           "refId": "A"
         }
       ],
-      "title": "Total Active Energy",
+      "title": "Frequency",
       "type": "timeseries"
     }
   ],
