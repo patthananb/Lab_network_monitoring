@@ -6,7 +6,7 @@
  *
  * Architecture:
  *   [XY-MD02 @0x01] -----------RS485--> [ESP32-S3] --+-- MQTT  (weather JSON, QoS 1)
- *   [Eastron SDM120 @0x02] ----RS485-->  RTU Master   |
+ *   [Eastron SDM120 @slave 2] --RS485-->  RTU Master   |
  *                                                   +-- TCP Slave :502 (Hregs)
  *                                                   |
  *                                                   +-- mDNS  <SLAVE_HOSTNAME>.local
@@ -74,7 +74,7 @@
 #define XYMD02_QTY      0x0002
 
 /* --- Eastron SDM120 RTU Parameters --- */
-#define SDM120_ADDR                  0x02
+#define SDM120_ADDR                  2
 #define SDM120_FC                    0x04
 #define SDM120_FLOAT_QTY             0x0002
 #define SDM120_INTER_READ_DELAY_MS   10
@@ -425,6 +425,7 @@ void setup() {
     #endif
     Serial.printf("RS485: UART%d TX=GPIO%d RX=GPIO%d %d baud\n",
                   RS485_UART_NUM, RS485_TX, RS485_RX, RS485_BAUD);
+    Serial.printf("SDM120 power meter: Modbus RTU slave address %u\n", SDM120_ADDR);
 
     connectWiFi();
 
