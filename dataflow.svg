@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1316" height="1316" viewBox="0 0 1316 1316">
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#27313f"/>
+    </marker>
+    <style>
+      .bg { fill: #f7f9fc; }
+      .title { font-family: Arial, sans-serif; font-size: 42px; font-weight: 700; fill: #172033; }
+      .subtitle { font-family: Arial, sans-serif; font-size: 20px; fill: #506079; }
+      .box { fill: #ffffff; stroke: #9fb0c8; stroke-width: 2; rx: 14; }
+      .pi { fill: #eef7ff; stroke: #6aa5d8; stroke-width: 2; rx: 18; }
+      .esp { fill: #f0fff7; stroke: #63b27b; stroke-width: 2; rx: 18; }
+      .warn { fill: #fff8ea; stroke: #d99a2b; stroke-width: 2; rx: 14; }
+      .label { font-family: Arial, sans-serif; font-size: 24px; font-weight: 700; fill: #172033; }
+      .small { font-family: Arial, sans-serif; font-size: 18px; fill: #42516a; }
+      .tiny { font-family: Arial, sans-serif; font-size: 15px; fill: #5d6b82; }
+      .line { stroke: #27313f; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .softline { stroke: #6d7f99; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1316" height="1316"/>
+  <text class="title" x="60" y="76">ESP32-S3 Weather Station Dataflow</text>
+  <text class="subtitle" x="62" y="112">XY-MD02 weather sensor + Eastron SDM120 power meter -> MQTT, InfluxDB, Grafana, and Modbus TCP</text>
+
+  <rect class="box" x="58" y="184" width="250" height="118"/>
+  <text class="label" x="82" y="230">XY-MD02</text>
+  <text class="small" x="82" y="262">Temp / humidity</text>
+  <text class="tiny" x="82" y="286">RTU addr 0x01, FC04</text>
+
+  <rect class="box" x="58" y="354" width="250" height="142"/>
+  <text class="label" x="82" y="400">Eastron SDM120</text>
+  <text class="small" x="82" y="432">Voltage, current, W</text>
+  <text class="small" x="82" y="458">VA, VAr, PF, Hz, kWh</text>
+  <text class="tiny" x="82" y="482">RTU addr 0x02, FC04 floats</text>
+
+  <rect class="esp" x="414" y="244" width="310" height="208"/>
+  <text class="label" x="450" y="292">ESP32-S3 Relay 6CH</text>
+  <text class="small" x="450" y="326">RS485 Modbus RTU master</text>
+  <text class="small" x="450" y="356">MQTT publisher, QoS 1</text>
+  <text class="small" x="450" y="386">Modbus TCP slave :502</text>
+  <text class="tiny" x="450" y="418">mDNS: esp32s3-weather.local</text>
+
+  <path class="line" d="M308 243 C348 243, 365 296, 414 306"/>
+  <path class="line" d="M308 425 C350 425, 370 382, 414 368"/>
+  <text class="tiny" x="318" y="214">RS485 bus, 9600 baud</text>
+
+  <rect class="pi" x="832" y="160" width="360" height="540"/>
+  <text class="label" x="868" y="208">Raspberry Pi TIG Stack</text>
+
+  <rect class="box" x="872" y="244" width="280" height="72"/>
+  <text class="label" x="898" y="288">Mosquitto MQTT</text>
+  <text class="tiny" x="898" y="310">topic: sensors/esp32/data</text>
+
+  <rect class="box" x="872" y="350" width="280" height="72"/>
+  <text class="label" x="898" y="394">Telegraf</text>
+  <text class="tiny" x="898" y="416">JSON -> measurement weather</text>
+
+  <rect class="box" x="872" y="456" width="280" height="72"/>
+  <text class="label" x="898" y="500">InfluxDB 2.x</text>
+  <text class="tiny" x="898" y="522">bucket: sensors</text>
+
+  <rect class="box" x="872" y="562" width="280" height="72"/>
+  <text class="label" x="898" y="606">Grafana</text>
+  <text class="tiny" x="898" y="628">weather, power, Pi telemetry</text>
+
+  <path class="line" d="M724 314 C770 300, 810 284, 872 280"/>
+  <text class="tiny" x="736" y="278">MQTT JSON</text>
+  <path class="softline" d="M1012 316 L1012 350"/>
+  <path class="softline" d="M1012 422 L1012 456"/>
+  <path class="softline" d="M1012 528 L1012 562"/>
+
+  <rect class="box" x="496" y="586" width="270" height="118"/>
+  <text class="label" x="526" y="632">Modbus TCP Clients</text>
+  <text class="small" x="526" y="664">mbpoll / SCADA / tools</text>
+  <text class="tiny" x="526" y="690">HR0..HR20, port 502</text>
+  <path class="line" d="M620 452 C620 498, 620 540, 620 586"/>
+
+  <rect class="warn" x="58" y="746" width="522" height="126"/>
+  <text class="label" x="88" y="792">Operational Notes</text>
+  <text class="small" x="88" y="826">LAN-only services unless MQTT/Grafana/Influx are hardened.</text>
+  <text class="small" x="88" y="856">Use .env for stack secrets and keep Modbus TCP on a trusted VLAN.</text>
+
+  <rect class="box" x="706" y="746" width="486" height="126"/>
+  <text class="label" x="736" y="792">Review Artifacts</text>
+  <text class="small" x="736" y="826">docs/project_review.md</text>
+  <text class="small" x="736" y="856">weatherstation_docker/power_meter_template.json</text>
+</svg>

@@ -49,12 +49,20 @@ chromium --noerrdialogs --disable-infobars \
 ```
 
 ### 3. Enable Grafana Anonymous Access
-Add these environment variables to the `grafana` service in `docker-compose.yml`:
-```yaml
-environment:
-  - GF_AUTH_ANONYMOUS_ENABLED=true
-  - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+Copy the stack environment template and confirm kiosk-friendly Grafana values:
+```bash
+cd ~/weather-station/weatherstation_docker
+cp .env.example .env
+nano .env
 ```
+
+Use:
+```bash
+GRAFANA_ANONYMOUS_ENABLED=true
+GRAFANA_ANONYMOUS_ORG_ROLE=Viewer
+GRAFANA_ALLOW_EMBEDDING=true
+```
+
 Then restart Grafana: `docker compose up -d grafana`.
 
 ### 4. Auto-Login and Start X on Boot

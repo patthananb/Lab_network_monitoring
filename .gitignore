@@ -8,6 +8,9 @@ build/
 .vscode/
 
 # Local/Secret files (already handled but good to have)
+**/.env
+!.env.example
+!**/.env.example
 
 # Docker data (if volumes were local)
 weatherstation_docker/influxdb_data/
@@ -17,6 +20,6 @@ weatherstation_docker/mosquitto_log/
 
 # Temporary files
 *.json
-!weatherstation_docker/dashboard_template.json
-!weatherstation_docker/pi_telemetry_template.json
+!weatherstation_docker/*_template.json
+!grafana/dashboards/*.json
 firmware/src/firmware/secrets.h

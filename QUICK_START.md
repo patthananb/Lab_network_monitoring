@@ -78,6 +78,9 @@ ssh pi@<pi-ip-address>
 Navigate to the Docker directory and bring up all services:
 ```bash
 cd ~/weather-station/weatherstation_docker
+cp .env.example .env
+# Optional but recommended: edit .env and replace default passwords/tokens.
+nano .env
 docker compose up -d
 ```
 
@@ -86,7 +89,7 @@ Verify they're running:
 docker compose ps
 ```
 
-You should see **grafana**, **influxdb**, and **mosquitto** containers marked as "Up".
+You should see **grafana**, **influxdb**, **mosquitto**, and **telegraf** containers marked as "Up".
 
 ### Step 5: Access Grafana
 
@@ -129,8 +132,8 @@ Once the stack is running:
 
 | Service | Port | Access | Default Credentials |
 |---------|------|--------|-------------------|
-| **Grafana** | 3000 | http://pi-ip:3000 | admin / admin |
-| **InfluxDB** | 8086 | http://pi-ip:8086 | admin / adminpassword |
+| **Grafana** | 3000 | http://pi-ip:3000 | From `.env` |
+| **InfluxDB** | 8086 | http://pi-ip:8086 | From `.env` |
 | **MQTT** | 1883 | mqtt://pi-ip:1883 | anonymous (no auth) |
 
 > **Note:** See the README.md "Security Note" section for recommended hardening before exposing these services to untrusted networks.
@@ -211,27 +214,22 @@ exit
 ssh pi@<pi-ip-address>
 ```
 
-### Step 5: Enable Anonymous Grafana Access
+### Step 5: Configure the Stack Environment
 
-For a kiosk, you don't want login screens. Edit the Docker configuration to allow anonymous access:
+For a kiosk, you don't want login screens. The compose file already supports anonymous viewer access through `.env`.
 
 ```bash
-nano ~/weather-station/weatherstation_docker/docker-compose.yml
+cd ~/weather-station/weatherstation_docker
+cp .env.example .env
+nano .env
 ```
 
-Find the `grafana:` section and add these environment variables:
+Confirm these values are present:
 
-```yaml
-grafana:
-  image: grafana/grafana:latest
-  environment:
-    - GF_SECURITY_ADMIN_USER=admin
-    - GF_SECURITY_ADMIN_PASSWORD=admin
-    - GF_AUTH_ANONYMOUS_ENABLED=true        # ← add this
-    - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer     # ← add this
-  ports:
-    - "3000:3000"
-  # ... rest of config
+```bash
+GRAFANA_ANONYMOUS_ENABLED=true
+GRAFANA_ANONYMOUS_ORG_ROLE=Viewer
+GRAFANA_ALLOW_EMBEDDING=true
 ```
 
 Save: `Ctrl+O`, `Enter`, `Ctrl+X`
@@ -354,7 +352,7 @@ Reboot to apply.
 | Problem | Fix |
 |---------|-----|
 | **Black screen after boot** | SSH in, check `cat ~/.bash_profile` (should contain `startx`), then check `cat ~/.xsession-errors` for X errors. Common: missing packages or `startx` line. |
-| **Grafana login page instead of dashboard** | SSH in, verify `GF_AUTH_ANONYMOUS_ENABLED=true` in `docker-compose.yml`, run `docker compose down && docker compose up -d grafana`, wait 10s, reboot Pi. |
+| **Grafana login page instead of dashboard** | SSH in, verify `GRAFANA_ANONYMOUS_ENABLED=true` in `weatherstation_docker/.env`, run `docker compose up -d grafana`, wait 10s, reboot Pi. |
 | **Chromium shows "Restore pages?" dialog on every boot** | Add this flag to the Chromium command: `--disable-session-crashed-bubble` |
 | **Screen blanks after a few minutes** | Verify all three `xset` lines are in `~/.config/openbox/autostart`: `s off`, `s noblank`, `-dpms`. Typos break it. |
 | **Touch input not working** | SSH in, run `xinput list` to see if touchscreen is recognized. Verify `--touch-events=enabled` is in the Chromium command in `autostart`. May need to reboot. |
@@ -449,9 +447,12 @@ Press `Ctrl+C` to stop.
 
 Query the database:
 ```bash
+set -a
+. ./.env
+set +a
 curl -X POST http://localhost:8086/api/v1/query \
-  -H "Authorization: Token mysecrettoken" \
-  -d 'org=weatherstation&bucket=sensors' \
+  -H "Authorization: Token ${INFLUXDB_ADMIN_TOKEN}" \
+  -d "org=${INFLUXDB_ORG}&bucket=${INFLUXDB_BUCKET}" \
   -d 'query=from(bucket:"sensors")|>range(start:-1h)'
 ```
 
@@ -475,6 +476,7 @@ Now that data is flowing, create visualizations in Grafana. See **README.md** fo
 - Temperature trends
 - Humidity graphs
 - Sensor status
+- SDM120 voltage, current, power, frequency, power factor, and energy
 - Pi CPU and memory usage
 
 ### For Touchscreen Users: Create a Playlist
@@ -518,10 +520,11 @@ Before exposing your system to untrusted networks, see **README.md** → **Secur
 
 This means anonymous access wasn't enabled. On the Pi:
 ```bash
-nano ~/weather-station/weatherstation_docker/docker-compose.yml
+cd ~/weather-station/weatherstation_docker
+nano .env
 ```
 
-Add `GF_AUTH_ANONYMOUS_ENABLED=true` and `GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer` to the grafana environment section, then:
+Set `GRAFANA_ANONYMOUS_ENABLED=true` and `GRAFANA_ANONYMOUS_ORG_ROLE=Viewer`, then:
 ```bash
 docker compose restart grafana
 sudo reboot

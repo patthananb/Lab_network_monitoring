@@ -7,11 +7,13 @@ A weather monitoring system using an ESP32-S3, an XY-MD02 Modbus RTU temperature
 ### 1. Docker Setup
 ```bash
 cd weatherstation_docker/
-docker-compose up -d
+cp .env.example .env
+# Optional but recommended: edit .env and replace default passwords/tokens.
+docker compose up -d
 ```
 - **MQTT**: `localhost:1883`
-- **InfluxDB**: `localhost:8086` (Token: `mysecrettoken`)
-- **Grafana**: `localhost:3000` (User/Pass: `admin/admin`)
+- **InfluxDB**: `localhost:8086` (credentials from `.env`)
+- **Grafana**: `localhost:3000` (credentials from `.env`)
 
 ### 2. Firmware Setup
 1. Open `firmware/src/firmware/firmware.ino` in Arduino IDE.
@@ -30,13 +32,15 @@ docker-compose up -d
 ## 📊 Data & Visualization
 
 ### Grafana Setup
-1. Connect InfluxDB as a data source (Flux, `http://influxdb:8086`, Org: `weatherstation`, Token: `mysecrettoken`).
+1. Connect InfluxDB as a data source (Flux, `http://influxdb:8086`, Org and token from `.env`).
 2. Build dashboards using the telemetry fields: `temperature`, `humidity`, `status`, `poll_count`, `power_status`, `power_voltage`, `power_current`, `power_watts`, `power_apparent_va`, `power_reactive_var`, `power_factor`, `power_frequency`, and `power_energy_kwh`.
+3. Import `weatherstation_docker/power_meter_template.json` for the SDM120 power-meter dashboard.
 
 ### Documentation
 - 💡 **[Flux Queries](docs/flux_queries.md)** — Detailed queries for all metrics.
 - 📈 **[Querying Guide](docs/querying_guide.md)** — Advanced patterns and Grafana variables.
 - 📺 **[Kiosk Setup](docs/kiosk_setup.md)** — Dedicated 7" touchscreen display instructions.
+- 🧪 **[Project Review Runbook](docs/project_review.md)** — End-to-end review and verification checklist.
 
 <details>
 <summary><b>🔍 Optional: Modbus TCP Verification</b></summary>
@@ -69,13 +73,14 @@ Telegraf also collects Raspberry Pi system metrics (CPU, RAM, Disk, Temperature)
 </details>
 
 ## 🚢 Deployment & Security
-- **Moving to Production**: Copy `weatherstation_docker/` to your Pi and update `MQTT_BROKER` in the firmware.
+- **Moving to Production**: Copy `weatherstation_docker/` to your Pi, copy `.env.example` to `.env`, rotate all default credentials, and update `MQTT_BROKER` in the firmware.
 - **Security**: This is a LAN-only setup. See [PROGRESS.md](PROGRESS.md) for the production readiness checklist (Authentication, Secrets management, TLS).
 
 ## 🛠️ Project Structure
 ```text
 .
 ├── weatherstation_docker/   # TIG + MQTT Stack configurations
+├── docs/                    # Query, kiosk, and review runbooks
 └── firmware/
     └── src/
         └── firmware/        # ESP32 Source Code

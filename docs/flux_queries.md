@@ -87,6 +87,42 @@ from(bucket: "sensors")
   |> yield(name: "power_watts")
 ```
 
+### Apparent Power (VA)
+```flux
+from(bucket: "sensors")
+  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+  |> filter(fn: (r) => r["_measurement"] == "weather")
+  |> filter(fn: (r) => r["_field"] == "power_apparent_va")
+  |> yield(name: "power_apparent_va")
+```
+
+### Reactive Power (VAr)
+```flux
+from(bucket: "sensors")
+  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+  |> filter(fn: (r) => r["_measurement"] == "weather")
+  |> filter(fn: (r) => r["_field"] == "power_reactive_var")
+  |> yield(name: "power_reactive_var")
+```
+
+### Power Factor
+```flux
+from(bucket: "sensors")
+  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+  |> filter(fn: (r) => r["_measurement"] == "weather")
+  |> filter(fn: (r) => r["_field"] == "power_factor")
+  |> yield(name: "power_factor")
+```
+
+### Frequency (Hz)
+```flux
+from(bucket: "sensors")
+  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+  |> filter(fn: (r) => r["_measurement"] == "weather")
+  |> filter(fn: (r) => r["_field"] == "power_frequency")
+  |> yield(name: "power_frequency")
+```
+
 ### Total Active Energy (kWh)
 ```flux
 from(bucket: "sensors")
@@ -94,6 +130,32 @@ from(bucket: "sensors")
   |> filter(fn: (r) => r["_measurement"] == "weather")
   |> filter(fn: (r) => r["_field"] == "power_energy_kwh")
   |> yield(name: "power_energy_kwh")
+```
+
+### SDM120 Status
+```flux
+from(bucket: "sensors")
+  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+  |> filter(fn: (r) => r["_measurement"] == "weather")
+  |> filter(fn: (r) => r["_field"] == "power_status")
+  |> yield(name: "power_status")
+```
+
+### All SDM120 power fields
+```flux
+from(bucket: "sensors")
+  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+  |> filter(fn: (r) => r["_measurement"] == "weather")
+  |> filter(fn: (r) => r["_field"] == "power_voltage" or
+                       r["_field"] == "power_current" or
+                       r["_field"] == "power_watts" or
+                       r["_field"] == "power_apparent_va" or
+                       r["_field"] == "power_reactive_var" or
+                       r["_field"] == "power_factor" or
+                       r["_field"] == "power_frequency" or
+                       r["_field"] == "power_energy_kwh")
+  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)
+  |> yield(name: "sdm120_power")
 ```
 
 ### All fields in one query
