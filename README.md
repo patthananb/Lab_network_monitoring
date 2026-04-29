@@ -16,8 +16,21 @@ docker compose up -d
 - **Grafana**: `localhost:3000` (credentials from `.env`)
 
 ### 2. Firmware Setup
+
+**Option A: PlatformIO (Recommended)**
+```bash
+cd firmware_platformio
+pip install platformio
+cp src/secrets.h.example src/secrets.h
+# Edit src/secrets.h with WiFi/MQTT credentials
+pio run -e waveshare_esp32s3_relay          # Build
+pio run -e waveshare_esp32s3_relay -t upload  # Flash
+pio device monitor                          # Serial monitor
+```
+
+**Option B: Arduino IDE**
 1. Open `firmware/src/firmware/firmware.ino` in Arduino IDE.
-2. Configure `secrets.h` with WiFi and MQTT Broker IP.
+2. Configure `firmware/src/firmware/secrets.h` with WiFi and MQTT Broker IP.
 3. Install libraries: `MQTT` (Joel Gaehwiler), `modbus-esp8266`.
 4. Board: **ESP32S3 Dev Module** with **USB CDC On Boot** enabled.
 5. Upload.
