@@ -89,14 +89,27 @@ Telegraf also collects Raspberry Pi system metrics (CPU, RAM, Disk, Temperature)
 - **Moving to Production**: Copy `weatherstation_docker/` to your Pi, copy `.env.example` to `.env`, rotate all default credentials, and update `MQTT_BROKER` in the firmware.
 - **Security**: This is a LAN-only setup. See [PROGRESS.md](PROGRESS.md) for the production readiness checklist (Authentication, Secrets management, TLS).
 
+## 📦 Resource Usage
+
+Firmware built with PlatformIO (Release mode, ESP32-S3 PSRAM enabled):
+
+| Segment | Used      | Total     | %    |
+|---------|-----------|-----------|------|
+| Flash   | 946 KB    | 1310 KB   | 72.2 |
+| RAM     | 48.5 KB   | 327.6 KB  | 14.8 |
+
+*Built: PlatformIO migration (c9cbacb)*
+
 ## 🛠️ Project Structure
 ```text
 .
+├── firmware/                # Arduino IDE build (original)
+│   └── src/firmware/        # .ino + headers
+├── firmware_platformio/     # PlatformIO build (recommended)
+│   ├── platformio.ini
+│   └── src/                 # main.cpp + headers
 ├── weatherstation_docker/   # TIG + MQTT Stack configurations
-├── docs/                    # Query, kiosk, and review runbooks
-└── firmware/
-    └── src/
-        └── firmware/        # ESP32 Source Code
+└── docs/                    # Query, kiosk, and review runbooks
 ```
 
 ## 📈 Roadmap
