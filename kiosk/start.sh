@@ -14,6 +14,7 @@ done
 while true; do
   chromium --noerrdialogs --disable-infobars \
     --kiosk --touch-events=enabled \
-    "http://localhost:3000/playlists/play/ad6vm6w?kiosk=true"
+    --user-data-dir=/home/pi/kiosk/chrome-profile \
+    "file:///home/pi/kiosk/index.html"
   sleep 3
 done

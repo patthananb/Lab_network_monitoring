@@ -1,40 +1,153 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Weather Station Kiosk</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #000; overflow: hidden; }
-    iframe { width: 100vw; height: 100vh; border: none; display: block; }
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #0b0f14;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    iframe {
+      width: 100vw;
+      height: 100vh;
+      border: 0;
+      display: block;
+      background: #111217;
+    }
+
+    .controls {
+      position: fixed;
+      left: 50%;
+      bottom: 10px;
+      z-index: 10;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      transform: translateX(-50%);
+      padding: 8px;
+      border-radius: 999px;
+      background: rgba(8, 11, 16, 0.76);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      backdrop-filter: blur(8px);
+    }
+
+    button {
+      min-width: 92px;
+      min-height: 48px;
+      border: 0;
+      border-radius: 999px;
+      background: #f0f4ff;
+      color: #111827;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    button:active {
+      transform: scale(0.97);
+      background: #b9d4ff;
+    }
+
+    .label {
+      min-width: 160px;
+      color: #eef2ff;
+      font-size: 15px;
+      font-weight: 650;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 700px) {
+      .controls {
+        left: 8px;
+        right: 8px;
+        bottom: 8px;
+        transform: none;
+        justify-content: space-between;
+      }
+
+      button {
+        min-width: 76px;
+        min-height: 44px;
+        font-size: 16px;
+      }
+
+      .label {
+        min-width: 0;
+        flex: 1;
+        font-size: 14px;
+      }
+    }
   </style>
 </head>
 <body>
-  <iframe id="frame" src=""></iframe>
+  <iframe id="dashboard" title="Grafana dashboard"></iframe>
+
+  <div class="controls">
+    <button id="prev" type="button">Prev</button>
+    <div id="label" class="label"></div>
+    <button id="next" type="button">Next</button>
+  </div>
+
   <script>
-    const INTERVAL = 5000;
-    const BASE = 'http://localhost:3000';
-    const TIME = '&from=now-24h&to=now&kiosk=true';
+    const BASE = "http://localhost:3000";
+    const QUERY = "kiosk=true&from=now-6h&to=now&refresh=10s";
+    const AUTO_CYCLE_MS = 60000;
 
     const pages = [
-      BASE + '/d/adfwxqs/pi-telemetry?viewPanel=1'  + TIME,
-      BASE + '/d/adfwxqs/pi-telemetry?viewPanel=7'  + TIME,
-      BASE + '/d/adfwxqs/pi-telemetry?viewPanel=9'  + TIME,
-      BASE + '/d/adfwxqs/pi-telemetry?viewPanel=3'  + TIME,
-      BASE + '/d/ad8k4s5/temperature-and-humidity?viewPanel=1' + TIME,
-      BASE + '/d/ad8k4s5/temperature-and-humidity?viewPanel=2' + TIME,
-      BASE + '/d/ad8k4s5/temperature-and-humidity?viewPanel=3' + TIME,
+      {
+        title: "Pi Telemetry",
+        url: `${BASE}/d/adfwxqs/pi-telemetry?${QUERY}`,
+      },
+      {
+        title: "Temperature",
+        url: `${BASE}/d/ad8k4s5/temperature-and-humidity?${QUERY}`,
+      },
+      {
+        title: "Power Meter",
+        url: `${BASE}/d/sdm120power/sdm120-power-meter?${QUERY}`,
+      },
     ];
 
-    let i = 0;
-    const frame = document.getElementById('frame');
+    let index = 0;
+    let timer = null;
+    const frame = document.getElementById("dashboard");
+    const label = document.getElementById("label");
 
-    function next() {
-      frame.src = pages[i];
-      i = (i + 1) % pages.length;
+    function showPage(nextIndex) {
+      index = (nextIndex + pages.length) % pages.length;
+      frame.src = pages[index].url;
+      label.textContent = `${index + 1}/${pages.length} ${pages[index].title}`;
     }
 
-    next();
-    setInterval(next, INTERVAL);
+    function resetTimer() {
+      clearInterval(timer);
+      timer = setInterval(() => showPage(index + 1), AUTO_CYCLE_MS);
+    }
+
+    document.getElementById("prev").addEventListener("click", () => {
+      showPage(index - 1);
+      resetTimer();
+    });
+
+    document.getElementById("next").addEventListener("click", () => {
+      showPage(index + 1);
+      resetTimer();
+    });
+
+    showPage(0);
+    resetTimer();
   </script>
 </body>
 </html>
