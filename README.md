@@ -85,6 +85,12 @@ mbpoll -a 1 -t 4 -r 1 -c 21 esp32s3-weather.local
 Telegraf also collects Raspberry Pi system metrics (CPU, RAM, Disk, Temperature) and stores them in the `sensors` bucket. See [docs/flux_queries.md](docs/flux_queries.md) for examples.
 </details>
 
+<details>
+<summary><b>🌐 Internet Speed Monitoring</b></summary>
+
+Telegraf runs a speedtest every 5 minutes via the `internet_speed` plugin and stores `download`, `upload`, `latency`, and `jitter` (Mbps / ms) in the `internet_speed` measurement. The Networking dashboard plots Download/Upload over time alongside the existing ping-based connectivity panels.
+</details>
+
 ## 🚢 Deployment & Security
 - **Moving to Production**: Copy `weatherstation_docker/` to your Pi, copy `.env.example` to `.env`, rotate all default credentials, and update `MQTT_BROKER` in the firmware.
 - **Security**: This is a LAN-only setup. See [PROGRESS.md](PROGRESS.md) for the production readiness checklist (Authentication, Secrets management, TLS).
